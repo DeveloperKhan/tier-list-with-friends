@@ -382,3 +382,4 @@ cd server && npm install socket.io
 - **HMR port 443**: `vite.config.ts` sets `hmr.clientPort: 443` — required for hot reload to work through the cloudflared HTTPS tunnel.
 - **No `window.location` redirects**: Discord's iframe sandbox blocks navigation. Use in-app state for routing.
 - **React StrictMode double-invoke**: `DiscordContext.tsx` uses a `useRef` guard to prevent running the auth flow twice.
+- **Socket.IO path is `/ws`, not `/socket.io`**: Discord URL mapping prefixes cannot contain periods, so Socket.IO is mounted at `/ws`. The server sets `path: "/ws"` in the `Server` constructor. The client must connect with `io({ path: "/ws" })`. The `patchUrlMappings` call must use `{ prefix: "/ws", target: "..." }` — never `/socket.io`.

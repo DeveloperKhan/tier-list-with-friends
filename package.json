@@ -1,0 +1,12 @@
+{
+  "name": "tier-list-with-friends",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n sidecar,server,client,tunnel -c magenta,blue,green,yellow \"npm start --prefix sidecar\" \"npm start --prefix server\" \"npm run dev --prefix client\" \"cloudflared tunnel --url http://localhost:3001\"",
+    "dev:server": "concurrently -n sidecar,server -c magenta,blue \"npm start --prefix sidecar\" \"npm start --prefix server\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

@@ -1,8 +1,11 @@
 import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
-import { searchTemplates, getTemplateItems, fetchImage, closeBrowser } from "./tiermaker.js";
-dotenv.config({ path: "../.env" });
+dotenv.config({ path: new URL('../.env', import.meta.url) });
+
+const SIDECAR_URL = process.env.TIERMAKER_SIDECAR_URL?.replace(/\/$/, "");
 
 const app = express();
 const port = 3001;
@@ -42,74 +45,62 @@ app.post("/api/token", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// TierMaker API
+// TierMaker API — proxied to sidecar service
 // ---------------------------------------------------------------------------
 
-/**
- * GET /api/tiermaker/search?q=pokemon
- * Returns a list of matching TierMaker templates.
- * Uses Playwright + stealth to bypass Cloudflare on the HTML pages.
- */
-app.get("/api/tiermaker/search", async (req, res) => {
-  const q = String(req.query.q ?? "").trim();
-  if (!q) return res.status(400).json({ error: "q is required" });
-
+async function proxyToSidecar(path, res) {
+  if (!SIDECAR_URL) {
+    return res.status(503).json({ error: "TierMaker sidecar is not configured (TIERMAKER_SIDECAR_URL not set)" });
+  }
   try {
-    const results = await searchTemplates(q);
-    res.json(results);
+    const upstream = await fetch(`${SIDECAR_URL}${path}`);
+    const contentType = upstream.headers.get("content-type") ?? "application/json";
+    const cacheControl = upstream.headers.get("cache-control");
+    res.status(upstream.status).set("Content-Type", contentType);
+    if (cacheControl) res.set("Cache-Control", cacheControl);
+    upstream.body.pipe(res);
   } catch (err) {
-    console.error("[tiermaker search]", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("[sidecar proxy]", err.message);
+    res.status(502).json({ error: "Sidecar unreachable" });
   }
-});
+}
 
-/**
- * GET /api/tiermaker/template?url=https://tiermaker.com/create/...
- * Returns the name and item image URLs for a specific template.
- */
-app.get("/api/tiermaker/template", async (req, res) => {
-  const url = String(req.query.url ?? "").trim();
-  if (!url.startsWith("https://tiermaker.com/")) {
-    return res.status(400).json({ error: "url must be a tiermaker.com URL" });
-  }
+app.get("/api/tiermaker/search", (req, res) =>
+  proxyToSidecar(`/search?q=${encodeURIComponent(req.query.q ?? "")}`, res)
+);
 
-  try {
-    const data = await getTemplateItems(url);
-    res.json(data);
-  } catch (err) {
-    console.error("[tiermaker template]", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+app.get("/api/tiermaker/template", (req, res) =>
+  proxyToSidecar(`/template?url=${encodeURIComponent(req.query.url ?? "")}`, res)
+);
 
-/**
- * GET /api/tiermaker/image?url=https://tiermaker.com/images/...
- * Proxies a TierMaker CDN image. The CDN does not require Cloudflare bypass.
- * Only tiermaker.com/images/* URLs are accepted.
- */
-app.get("/api/tiermaker/image", async (req, res) => {
-  const url = String(req.query.url ?? "").trim();
-  if (!url.startsWith("https://tiermaker.com/images/")) {
-    return res.status(400).json({ error: "url must be a tiermaker.com/images/ URL" });
-  }
-
-  try {
-    const { buffer, contentType } = await fetchImage(url);
-    res.set("Content-Type", contentType);
-    res.set("Cache-Control", "public, max-age=86400"); // cache 24 h
-    res.send(buffer);
-  } catch (err) {
-    console.error("[tiermaker image]", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+app.get("/api/tiermaker/image", (req, res) =>
+  proxyToSidecar(`/image?url=${encodeURIComponent(req.query.url ?? "")}`, res)
+);
 
 // ---------------------------------------------------------------------------
 
-const server = app.listen(port, () => {
+app.get("/health", (_req, res) => res.sendStatus(200));
+
+// ---------------------------------------------------------------------------
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  path: "/ws",
+  cors: { origin: "*" },
+});
+
+io.on("connection", (socket) => {
+  console.log("[socket] connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("[socket] disconnected:", socket.id);
+  });
+});
+
+httpServer.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
 });
 
 // Clean up Chromium on graceful shutdown
-process.on("SIGTERM", async () => { await closeBrowser(); server.close(); });
-process.on("SIGINT",  async () => { await closeBrowser(); server.close(); });
+process.on("SIGTERM", async () => { await closeBrowser(); httpServer.close(); });
+process.on("SIGINT",  async () => { await closeBrowser(); httpServer.close(); });

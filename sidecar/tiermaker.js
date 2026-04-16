@@ -11,20 +11,28 @@
 
 import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import sparticuzChromium from '@sparticuz/chromium';
 import fetch from 'node-fetch';
 
 chromium.use(StealthPlugin());
 
 const TIERMAKER_BASE = 'https://tiermaker.com';
 
-// Singleton browser — reused across requests to avoid cold-start overhead.
-// playwright-extra chromium launch takes ~1-2 s; keeping the browser alive
-// means subsequent requests are fast (~500 ms for page navigation).
+// Singleton browser — reused across requests to avoid cold-start on every request.
 let browser = null;
 
 async function getBrowser() {
   if (!browser || !browser.isConnected()) {
-    browser = await chromium.launch({ headless: true });
+    const isProduction = process.platform === 'linux';
+    browser = await chromium.launch(
+      isProduction
+        ? {
+            args: sparticuzChromium.args,
+            executablePath: await sparticuzChromium.executablePath(),
+            headless: true,
+          }
+        : { headless: true }
+    );
   }
   return browser;
 }

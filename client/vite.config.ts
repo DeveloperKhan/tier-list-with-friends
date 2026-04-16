@@ -26,5 +26,6 @@ export default defineConfig({
     // Set VITE_TUNNEL=true in your shell before starting the dev server:
     //   VITE_TUNNEL=true npm run dev
     hmr: process.env.VITE_TUNNEL ? { clientPort: 443 } : true,
+    allowedHosts: true,
   },
 });
