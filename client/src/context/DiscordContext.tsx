@@ -85,16 +85,10 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
       try {
         await discordSdk.ready();
 
-        // Tell the Discord SDK about proxy path mappings so /api/* and /ws/*
-        // requests are routed to the backend tunnel rather than the root mapping.
+        // Patch global fetch/WebSocket so all requests get the /.proxy/ prefix
+        // required for Discord's Activity proxy layer to route them correctly.
         if (isInsideDiscord) {
-          const backendUrl = import.meta.env.VITE_BACKEND_URL as string | undefined;
-          if (backendUrl) {
-            patchUrlMappings([
-              { prefix: '/api', target: backendUrl },
-              { prefix: '/ws', target: backendUrl },
-            ]);
-          }
+          patchUrlMappings([]);
         }
 
         if (!isInsideDiscord) {
