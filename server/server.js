@@ -13,6 +13,12 @@ const port = 3001;
 // Allow express to parse JSON bodies
 app.use(express.json());
 
+// Request logger
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 app.post("/api/token", async (req, res) => {
   try {
     // Exchange the code for an access_token

@@ -1,4 +1,4 @@
-import { DiscordSDK, DiscordSDKMock, type IDiscordSDK } from '@discord/embedded-app-sdk';
+import { DiscordSDK, DiscordSDKMock, patchUrlMappings, type IDiscordSDK } from '@discord/embedded-app-sdk';
 import React, {
   createContext,
   useContext,
@@ -84,6 +84,18 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
     async function setup() {
       try {
         await discordSdk.ready();
+
+        // Tell the Discord SDK about proxy path mappings so /api/* and /ws/*
+        // requests are routed to the backend tunnel rather than the root mapping.
+        if (isInsideDiscord) {
+          const backendUrl = import.meta.env.VITE_BACKEND_URL as string | undefined;
+          if (backendUrl) {
+            patchUrlMappings([
+              { prefix: '/api', target: backendUrl },
+              { prefix: '/ws', target: backendUrl },
+            ]);
+          }
+        }
 
         if (!isInsideDiscord) {
           /**
