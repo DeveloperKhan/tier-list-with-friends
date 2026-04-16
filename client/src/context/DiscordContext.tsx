@@ -1,4 +1,4 @@
-import { DiscordSDK, DiscordSDKMock, patchUrlMappings, type IDiscordSDK } from '@discord/embedded-app-sdk';
+import { DiscordSDK, DiscordSDKMock, type IDiscordSDK } from '@discord/embedded-app-sdk';
 import React, {
   createContext,
   useContext,
@@ -139,9 +139,21 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
 
         const auth = await discordSdk.commands.authenticate({ access_token });
 
-        // Patch fetch/WebSocket after auth so subsequent requests (API calls,
-        // sockets) get the /.proxy/ prefix Discord's proxy layer requires.
-        patchUrlMappings([]);
+        // Patch fetch after auth so /api/tiermaker/* and /ws/* requests get the
+        // /.proxy/ prefix Discord's proxy layer requires for URL mapping routing.
+        // Only these prefixes are patched — /api/token is left untouched.
+        const _nativeFetch = window.fetch.bind(window);
+        window.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
+          const url = typeof input === 'string' ? input
+            : input instanceof URL ? input.toString()
+            : (input as Request).url;
+          const needsProxy = (url.startsWith('/api/') && url !== '/api/token') || url.startsWith('/ws');
+          if (needsProxy) {
+            const proxied = `/.proxy${url}`;
+            return _nativeFetch(typeof input === 'string' ? proxied : new URL(proxied, window.location.href), init);
+          }
+          return _nativeFetch(input as RequestInfo, init);
+        };
 
         setAuth({
           status: 'ready',
