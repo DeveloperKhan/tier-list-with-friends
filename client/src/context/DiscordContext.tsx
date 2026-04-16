@@ -118,7 +118,7 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
           response_type: 'code',
           state: '',
           prompt: 'none',
-          scope: ['identify', 'guilds', 'guilds.members.read', 'rpc.voice.read'],
+          scope: ['identify', 'guilds', 'guilds.members.read'],
         });
 
         // The server exchanges the code for an access_token using the
@@ -129,7 +129,10 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ code }),
         });
 
-        if (!tokenRes.ok) throw new Error('Token exchange failed');
+        if (!tokenRes.ok) {
+          const body = await tokenRes.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error ?? `Token exchange failed (HTTP ${tokenRes.status})`);
+        }
         const { access_token } = (await tokenRes.json()) as {
           access_token: string;
         };

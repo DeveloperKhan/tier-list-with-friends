@@ -101,6 +101,5 @@ httpServer.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
 });
 
-// Clean up Chromium on graceful shutdown
-process.on("SIGTERM", async () => { await closeBrowser(); httpServer.close(); });
-process.on("SIGINT",  async () => { await closeBrowser(); httpServer.close(); });
+process.on("SIGTERM", () => httpServer.close());
+process.on("SIGINT",  () => httpServer.close());

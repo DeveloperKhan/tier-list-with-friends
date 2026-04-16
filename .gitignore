@@ -11,6 +11,7 @@ node_modules
 
 # Sensitive environment variables
 .env
+.dev.vars
 
 # Modules + built files
 node_modules
