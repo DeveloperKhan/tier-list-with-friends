@@ -2,9 +2,9 @@ interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
   VITE_DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
+  /** Backend origin. Set in .dev.vars for local dev, Cloudflare dashboard for production. */
+  BACKEND_URL: string;
 }
-
-const BACKEND_URL = `https://commissioners-pace-martial-cooperative.trycloudflare.com`;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -46,20 +46,23 @@ export default {
       return Response.json({ access_token: data.access_token });
     }
 
-    // Proxy /api/tiermaker/* and /ws/* to the backend tunnel.
-    // The Worker runs server-side so it can reach the tunnel directly,
-    // bypassing browser CSP and Discord URL mapping unreliability.
+    // Proxy /api/tiermaker/* and /ws/* to the backend.
     if (url.pathname.startsWith('/api/tiermaker/') || url.pathname.startsWith('/ws/')) {
-      const target = BACKEND_URL.replace(/\/$/, '');
-      const upstream = await fetch(`${target}${url.pathname}${url.search}`, {
-        method: request.method,
-        headers: request.headers,
-        body: request.body ?? undefined,
-      });
-      return new Response(upstream.body, {
-        status: upstream.status,
-        headers: upstream.headers,
-      });
+      const target = (env.BACKEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+      try {
+        const upstream = await fetch(`${target}${url.pathname}${url.search}`, {
+          method: request.method,
+          headers: request.headers,
+          body: request.body ?? undefined,
+        });
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers: upstream.headers,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: `Proxy error: ${message}` }, { status: 502 });
+      }
     }
 
     // All other requests: serve static SPA assets
