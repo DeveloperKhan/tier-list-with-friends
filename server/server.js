@@ -11,26 +11,34 @@ const port = 3001;
 app.use(express.json());
 
 app.post("/api/token", async (req, res) => {
-  
-  // Exchange the code for an access_token
-  const response = await fetch(`https://discord.com/api/oauth2/token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      client_id: process.env.VITE_DISCORD_CLIENT_ID,
-      client_secret: process.env.DISCORD_CLIENT_SECRET,
-      grant_type: "authorization_code",
-      code: req.body.code,
-    }),
-  });
+  try {
+    // Exchange the code for an access_token
+    const response = await fetch(`https://discord.com/api/oauth2/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: process.env.VITE_DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code: req.body.code,
+      }),
+    });
 
-  // Retrieve the access_token from the response
-  const { access_token } = await response.json();
+    const data = await response.json();
 
-  // Return the access_token to our client as { access_token: "..."}
-  res.send({access_token});
+    if (!response.ok) {
+      console.error("[token exchange] Discord error:", data);
+      return res.status(response.status).json({ error: data.error_description ?? data.error ?? "Discord token exchange failed" });
+    }
+
+    // Return the access_token to our client as { access_token: "..."}
+    res.send({ access_token: data.access_token });
+  } catch (err) {
+    console.error("[token exchange] Unexpected error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------
