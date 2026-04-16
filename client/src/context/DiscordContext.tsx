@@ -85,12 +85,6 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
       try {
         await discordSdk.ready();
 
-        // Patch global fetch/WebSocket so all requests get the /.proxy/ prefix
-        // required for Discord's Activity proxy layer to route them correctly.
-        if (isInsideDiscord) {
-          patchUrlMappings([]);
-        }
-
         if (!isInsideDiscord) {
           /**
            * LOCAL DEV (mock) path
@@ -144,6 +138,10 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
         };
 
         const auth = await discordSdk.commands.authenticate({ access_token });
+
+        // Patch fetch/WebSocket after auth so subsequent requests (API calls,
+        // sockets) get the /.proxy/ prefix Discord's proxy layer requires.
+        patchUrlMappings([]);
 
         setAuth({
           status: 'ready',
