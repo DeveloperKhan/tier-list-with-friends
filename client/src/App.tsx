@@ -2,14 +2,26 @@ import { useDiscord, isInsideDiscord } from '@/context/DiscordContext';
 import { GameProvider, useGame } from '@/context/GameContext';
 import { SetupPage } from '@/pages/SetupPage';
 import { WaitingPage } from '@/pages/WaitingPage';
-import { Ban, TriangleAlert, Gamepad2 } from 'lucide-react';
+import { PlayingPage } from '@/pages/PlayingPage';
+import { Ban, TriangleAlert } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Inner app — rendered inside GameProvider, can use useGame()
 // ---------------------------------------------------------------------------
 
 function GameRouter() {
-  const { roomState, isHost, rejectionReason } = useGame();
+  const { roomState, isHost, rejectionReason, sessionEnded } = useGame();
+
+  if (sessionEnded) {
+    return (
+      <div className="flex h-full items-center justify-center bg-game-bg">
+        <div className="rounded-2xl border-2 border-white/10 bg-white/5 p-8 text-center max-w-sm space-y-2">
+          <p className="font-black text-white text-lg">Session ended</p>
+          <p className="text-sm text-white/50">The host ended the session. Refresh to start a new one.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (rejectionReason) {
     return (
@@ -43,15 +55,8 @@ function GameRouter() {
     return <WaitingPage />;
   }
 
-  // PLAYING phase — placeholder until the game board is built
-  return (
-    <div className="flex h-full items-center justify-center bg-game-bg">
-      <p className="text-white/50 font-bold flex items-center gap-2">
-        <Gamepad2 className="text-purple-400" size={18} />
-        Game board coming soon…
-      </p>
-    </div>
-  );
+  // PLAYING phase
+  return <PlayingPage />;
 }
 
 // ---------------------------------------------------------------------------

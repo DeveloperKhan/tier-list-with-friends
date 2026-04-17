@@ -95,6 +95,11 @@ const roomSockets = new Map();
 /** socketId -> { instanceId, userId } */
 const socketInfo = new Map();
 
+/** `${instanceId}:${userId}` -> NodeJS.Timeout — grace period before full cleanup */
+const pendingDisconnects = new Map();
+
+const GRACE_MS = 30_000; // 30 s to reconnect before being removed from the room
+
 const DEFAULT_TIERS = [
   { label: "S", color: "#FF4444" },
   { label: "A", color: "#FF8C00" },
@@ -134,6 +139,13 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   path: "/ws",
   cors: { origin: "*" },
+  // Give more headroom during heavy image-proxy bursts (template preview grid
+  // fires many concurrent requests that compete with Socket.IO polling).
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  // Default is 1 MB — START_GAME payloads can contain many base64 images
+  // (e.g. 60 items × 150 KB each ≈ 9 MB). Raise to 50 MB.
+  maxHttpBufferSize: 50 * 1024 * 1024,
 });
 
 io.on("connection", (socket) => {
@@ -148,6 +160,14 @@ io.on("connection", (socket) => {
       room = createRoom(instanceId, userId);
       rooms.set(instanceId, room);
       roomSockets.set(instanceId, new Map());
+    }
+
+    // Cancel any pending grace-period cleanup for this user so the room
+    // isn't torn down after they've already reconnected.
+    const graceKey = `${instanceId}:${userId}`;
+    if (pendingDisconnects.has(graceKey)) {
+      clearTimeout(pendingDisconnects.get(graceKey));
+      pendingDisconnects.delete(graceKey);
     }
 
     const sockets = roomSockets.get(instanceId);
@@ -185,11 +205,32 @@ io.on("connection", (socket) => {
   // ── START_GAME (host only) ───────────────────────────────────────────────
   // Receives the complete setup form from the host and transitions to PLAYING.
   // All setup state (title, tiers, images) lives on the client until this point.
-  socket.on("START_GAME", ({ title, tiers, items, bankItemIds }) => {
-    const info = socketInfo.get(socket.id);
-    if (!info) return;
+  socket.on("START_GAME", (payload) => {
+    const { instanceId: payloadIid, userId: payloadUid, title, tiers, items, bankItemIds } = payload ?? {};
+    const itemCount = Array.isArray(bankItemIds) ? bankItemIds.length : 0;
+    console.log(`[START_GAME] received from ${socket.id} — ${itemCount} items, iid=${payloadIid}, uid=${payloadUid}`);
+
+    let info = socketInfo.get(socket.id);
+    if (!info) {
+      // HMR / reconnect race: the socket reconnected but JOIN_ROOM hasn't
+      // been processed yet. Use the payload to re-register retroactively.
+      const room = rooms.get(payloadIid);
+      if (!payloadIid || !payloadUid || !room || room.hostId !== payloadUid || !room.participants[payloadUid]) {
+        console.log(`[START_GAME] rejected: socketInfo miss, socket=${socket.id}, iid=${payloadIid}, uid=${payloadUid}`);
+        return;
+      }
+      if (!roomSockets.has(payloadIid)) roomSockets.set(payloadIid, new Map());
+      roomSockets.get(payloadIid).set(socket.id, payloadUid);
+      socketInfo.set(socket.id, { instanceId: payloadIid, userId: payloadUid });
+      socket.join(payloadIid);
+      info = { instanceId: payloadIid, userId: payloadUid };
+      console.log(`[room:${payloadIid}] retroactive join via START_GAME for ${payloadUid}`);
+    }
     const room = rooms.get(info.instanceId);
-    if (!room || room.hostId !== info.userId) return;
+    if (!room || room.hostId !== info.userId) {
+      console.log(`[START_GAME] rejected: room check failed — room=${!!room}, hostId=${room?.hostId}, userId=${info.userId}`);
+      return;
+    }
 
     // Validate and sanitise tiers
     const sanitisedTiers = Array.isArray(tiers)
@@ -201,7 +242,7 @@ io.on("connection", (socket) => {
         }))
       : [];
 
-    // Validate and sanitise items — reject anything oversized or non-image
+    // Validate and sanitise items — three kinds: 'upload', 'tiermaker', 'text'
     const sanitisedItems = {};
     const sanitisedBankIds = [];
 
@@ -210,18 +251,58 @@ io.on("connection", (socket) => {
         if (sanitisedBankIds.length >= MAX_ITEMS) break;
         const item = items[id];
         if (!item) continue;
-        if (typeof item.dataUrl !== "string") continue;
-        if (!item.dataUrl.startsWith("data:image/")) continue;
-        if (item.dataUrl.length > MAX_IMAGE_BYTES) continue;
 
-        sanitisedItems[id] = {
-          id: String(id).slice(0, 36),
-          dataUrl: item.dataUrl,
-          fileName: String(item.fileName ?? "image").slice(0, 255),
-          uploadedBy: info.userId,
-          lockedBy: null,
-          ownedBy: null,
-        };
+        const kind = item.kind;
+        let sanitised = null;
+
+        if (kind === "upload") {
+          if (typeof item.dataUrl !== "string") continue;
+          if (!item.dataUrl.startsWith("data:image/")) continue;
+          if (item.dataUrl.length > MAX_IMAGE_BYTES) continue;
+          sanitised = {
+            id: String(id).slice(0, 36),
+            kind: "upload",
+            dataUrl: item.dataUrl,
+            imageUrl: "",
+            text: "",
+            fileName: String(item.fileName ?? "image").slice(0, 255),
+            uploadedBy: info.userId,
+            lockedBy: null,
+            ownedBy: null,
+          };
+        } else if (kind === "tiermaker") {
+          if (typeof item.imageUrl !== "string") continue;
+          const imgUrl = item.imageUrl;
+          if (!imgUrl.startsWith("https://tiermaker.com/images/") && !imgUrl.startsWith("/images/")) continue;
+          sanitised = {
+            id: String(id).slice(0, 36),
+            kind: "tiermaker",
+            dataUrl: "",
+            imageUrl: String(item.imageUrl).slice(0, 512),
+            text: "",
+            fileName: String(item.fileName ?? "image").slice(0, 255),
+            uploadedBy: info.userId,
+            lockedBy: null,
+            ownedBy: null,
+          };
+        } else if (kind === "text") {
+          if (typeof item.text !== "string" || !item.text.trim()) continue;
+          sanitised = {
+            id: String(id).slice(0, 36),
+            kind: "text",
+            dataUrl: "",
+            imageUrl: "",
+            text: String(item.text).slice(0, 200),
+            fileName: String(item.fileName ?? "text").slice(0, 255),
+            uploadedBy: info.userId,
+            lockedBy: null,
+            ownedBy: null,
+          };
+        } else {
+          continue;
+        }
+
+        sanitisedItems[id] = sanitised;
         sanitisedBankIds.push(id);
       }
     }
@@ -234,6 +315,291 @@ io.on("connection", (socket) => {
 
     io.to(info.instanceId).emit("STATE_UPDATE", room);
     console.log(`[room:${info.instanceId}] game started — ${sanitisedBankIds.length} items, ${sanitisedTiers.length} tiers`);
+  });
+
+  // ── LOCK_ITEM ────────────────────────────────────────────────────────────
+  socket.on("LOCK_ITEM", ({ itemId }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.phase !== "PLAYING") return;
+
+    const item = room.items[itemId];
+    if (!item) return;
+
+    // Reject if locked by someone else, or owned by someone else
+    if (
+      (item.lockedBy !== null && item.lockedBy !== info.userId) ||
+      (item.ownedBy !== null && item.ownedBy !== info.userId)
+    ) {
+      socket.emit("LOCK_REJECTED", {
+        itemId,
+        lockedBy: item.lockedBy ?? item.ownedBy,
+      });
+      return;
+    }
+
+    item.lockedBy = info.userId;
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── UNLOCK_ITEM ──────────────────────────────────────────────────────────
+  socket.on("UNLOCK_ITEM", ({ itemId }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room) return;
+
+    const item = room.items[itemId];
+    if (!item) return;
+
+    if (item.lockedBy === info.userId) {
+      item.lockedBy = null;
+    }
+
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── MOVE_ITEM ────────────────────────────────────────────────────────────
+  socket.on("MOVE_ITEM", ({ itemId, destination }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.phase !== "PLAYING") return;
+
+    const item = room.items[itemId];
+    if (!item || item.lockedBy !== info.userId) return;
+
+    // Remove from current location
+    room.bankItemIds = room.bankItemIds.filter((id) => id !== itemId);
+    for (const tier of room.tiers) {
+      tier.itemIds = tier.itemIds.filter((id) => id !== itemId);
+    }
+
+    if (destination?.type === "tier") {
+      const tier = room.tiers.find((t) => t.id === destination.tierId);
+      if (!tier) {
+        // Target tier not found — fall back to bank
+        room.bankItemIds.push(itemId);
+        item.ownedBy = null;
+      } else {
+        const idx =
+          typeof destination.index === "number"
+            ? Math.min(destination.index, tier.itemIds.length)
+            : tier.itemIds.length;
+        tier.itemIds.splice(idx, 0, itemId);
+        item.ownedBy = info.userId;
+      }
+    } else {
+      // type === 'bank' or unrecognised — return to bank
+      room.bankItemIds.push(itemId);
+      item.ownedBy = null;
+    }
+
+    item.lockedBy = null;
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── EDIT_TIER (host only) ────────────────────────────────────────────────
+  const TIER_PALETTE = [
+    "#FF4444", "#FF8C00", "#FFD700", "#32CD32",
+    "#1E90FF", "#9932CC", "#FF69B4", "#00CED1",
+  ];
+
+  socket.on("EDIT_TIER", ({ action, tierId, label, color, newIndex }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.hostId !== info.userId || room.phase !== "PLAYING") return;
+
+    if (action === "add") {
+      room.tiers.push({
+        id: randomUUID(),
+        label: "New",
+        color: TIER_PALETTE[room.tiers.length % TIER_PALETTE.length],
+        itemIds: [],
+      });
+    } else if (action === "delete") {
+      const idx = room.tiers.findIndex((t) => t.id === tierId);
+      if (idx === -1) return;
+      const [removed] = room.tiers.splice(idx, 1);
+      for (const id of removed.itemIds) {
+        room.bankItemIds.push(id);
+        if (room.items[id]) room.items[id].ownedBy = null;
+      }
+    } else if (action === "rename") {
+      const tier = room.tiers.find((t) => t.id === tierId);
+      if (tier && typeof label === "string") {
+        tier.label = label.slice(0, 10);
+      }
+    } else if (action === "recolor") {
+      const tier = room.tiers.find((t) => t.id === tierId);
+      if (tier && /^#[0-9a-fA-F]{6}$/.test(color)) {
+        tier.color = color;
+      }
+    } else if (action === "reorder") {
+      const fromIdx = room.tiers.findIndex((t) => t.id === tierId);
+      if (fromIdx === -1 || typeof newIndex !== "number") return;
+      const clamped = Math.max(0, Math.min(newIndex, room.tiers.length - 1));
+      const [tier] = room.tiers.splice(fromIdx, 1);
+      room.tiers.splice(clamped, 0, tier);
+    }
+
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── SET_TIERS (host only) — batch save from the edit-tiers modal ────────
+  socket.on("SET_TIERS", ({ tiers: incoming }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.hostId !== info.userId || room.phase !== "PLAYING") return;
+    if (!Array.isArray(incoming)) return;
+
+    // Build a lookup of existing tier itemIds so we can preserve them
+    const existingItemIds = new Map(room.tiers.map((t) => [t.id, t.itemIds]));
+
+    // Move items from deleted tiers to the bank
+    const newTierIds = new Set(incoming.map((t) => String(t.id)));
+    for (const tier of room.tiers) {
+      if (!newTierIds.has(tier.id)) {
+        for (const id of tier.itemIds) {
+          room.bankItemIds.push(id);
+          if (room.items[id]) room.items[id].ownedBy = null;
+        }
+      }
+    }
+
+    // Validate and build the new tiers list
+    room.tiers = incoming.slice(0, 20).map((t) => ({
+      id: String(t.id ?? randomUUID()).slice(0, 36),
+      label: String(t.label ?? "").slice(0, 10),
+      color: /^#[0-9a-fA-F]{6}$/.test(t.color) ? t.color : "#888888",
+      itemIds: existingItemIds.get(String(t.id)) ?? [],
+    }));
+
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+    console.log(`[room:${info.instanceId}] tiers updated by host (${room.tiers.length} tiers)`);
+  });
+
+  // ── UPLOAD_IMAGE (any player, PLAYING phase) ─────────────────────────────
+  socket.on("UPLOAD_IMAGE", ({ dataUrl, fileName }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.phase !== "PLAYING") return;
+
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) {
+      socket.emit("UPLOAD_REJECTED", { reason: "Invalid image format." });
+      return;
+    }
+    if (dataUrl.length > MAX_IMAGE_BYTES) {
+      socket.emit("UPLOAD_REJECTED", { reason: "Image too large (max ~150 KB)." });
+      return;
+    }
+    if (Object.keys(room.items).length >= MAX_ITEMS) {
+      socket.emit("UPLOAD_REJECTED", {
+        reason: `Room is at the ${MAX_ITEMS}-item limit.`,
+      });
+      return;
+    }
+
+    const id = randomUUID();
+    room.items[id] = {
+      id,
+      kind: "upload",
+      dataUrl,
+      imageUrl: "",
+      text: "",
+      fileName: String(fileName ?? "image").slice(0, 255),
+      uploadedBy: info.userId,
+      lockedBy: null,
+      ownedBy: null,
+    };
+    room.bankItemIds.push(id);
+
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── LOAD_TEMPLATE (any player) ───────────────────────────────────────────
+  socket.on("LOAD_TEMPLATE", ({ items: incoming }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.phase !== "PLAYING") return;
+
+    if (!Array.isArray(incoming)) return;
+
+    const total = incoming.length;
+    let loaded = 0;
+
+    for (const rawItem of incoming) {
+      if (Object.keys(room.items).length >= MAX_ITEMS) break;
+
+      const kind = rawItem.kind;
+      let newItem = null;
+
+      if (kind === "tiermaker") {
+        if (typeof rawItem.imageUrl !== "string") continue;
+        if (!rawItem.imageUrl.startsWith("https://tiermaker.com/images/") && !rawItem.imageUrl.startsWith("/images/")) continue;
+        newItem = {
+          id: randomUUID(),
+          kind: "tiermaker",
+          dataUrl: "",
+          imageUrl: String(rawItem.imageUrl).slice(0, 512),
+          text: "",
+          fileName: String(rawItem.fileName ?? "image").slice(0, 255),
+          uploadedBy: info.userId,
+          lockedBy: null,
+          ownedBy: null,
+        };
+      } else if (kind === "upload") {
+        if (typeof rawItem.dataUrl !== "string") continue;
+        if (!rawItem.dataUrl.startsWith("data:image/")) continue;
+        if (rawItem.dataUrl.length > MAX_IMAGE_BYTES) continue;
+        newItem = {
+          id: randomUUID(),
+          kind: "upload",
+          dataUrl: rawItem.dataUrl,
+          imageUrl: "",
+          text: "",
+          fileName: String(rawItem.fileName ?? "image").slice(0, 255),
+          uploadedBy: info.userId,
+          lockedBy: null,
+          ownedBy: null,
+        };
+      } else {
+        continue;
+      }
+
+      room.items[newItem.id] = newItem;
+      room.bankItemIds.push(newItem.id);
+      loaded++;
+    }
+
+    if (loaded < total) {
+      socket.emit("LOAD_TEMPLATE_PARTIAL", {
+        loaded,
+        total,
+        reason: `Only ${loaded} of ${total} images fit within the ${MAX_ITEMS}-item limit.`,
+      });
+    }
+
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── END_SESSION (host only) ──────────────────────────────────────────────
+  socket.on("END_SESSION", () => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.hostId !== info.userId) return;
+
+    io.to(info.instanceId).emit("PHASE_RESET");
+
+    rooms.delete(info.instanceId);
+    roomSockets.delete(info.instanceId);
+    console.log(`[room:${info.instanceId}] ended by host`);
   });
 
   // ── disconnect ───────────────────────────────────────────────────────────
@@ -253,27 +619,76 @@ io.on("connection", (socket) => {
     const room = rooms.get(instanceId);
     if (!room) return;
 
-    // Remove participant only if this user has no remaining sockets.
+    // If this user still has another socket open, nothing else to do.
     const userStillConnected = [...sockets.values()].some((uid) => uid === userId);
-    if (!userStillConnected) {
-      delete room.participants[userId];
+    if (userStillConnected) return;
+
+    // Immediately release any active drag lock so other players aren't
+    // blocked for the entire grace period. Owned placements stay in place.
+    let lockReleased = false;
+    for (const item of Object.values(room.items)) {
+      if (item.lockedBy === userId) {
+        item.lockedBy = null;
+        item.ownedBy = null;
+        for (const tier of room.tiers) {
+          tier.itemIds = tier.itemIds.filter((id) => id !== item.id);
+        }
+        if (!room.bankItemIds.includes(item.id)) {
+          room.bankItemIds.push(item.id);
+        }
+        lockReleased = true;
+      }
+    }
+    if (lockReleased) {
+      io.to(instanceId).emit("STATE_UPDATE", room);
     }
 
-    if (sockets.size === 0) {
-      rooms.delete(instanceId);
-      roomSockets.delete(instanceId);
-      console.log(`[room:${instanceId}] empty, deleted`);
-      return;
-    }
+    // Start grace period — give the user 30 s to reconnect before evicting
+    // them. This handles transient drops (image-loading spike, brief network
+    // blip) without disrupting the room for everyone else.
+    const graceKey = `${instanceId}:${userId}`;
+    console.log(`[room:${instanceId}] ${userId} disconnected — grace period started (${GRACE_MS / 1000}s)`);
 
-    // Host re-election — only when the host user is fully gone (no sockets left).
-    if (room.hostId === userId && !userStillConnected) {
-      const remainingUsers = [...new Set([...sockets.values()])];
-      room.hostId = remainingUsers[Math.floor(Math.random() * remainingUsers.length)];
-      console.log(`[room:${instanceId}] new host: ${room.hostId}`);
-    }
+    const timer = setTimeout(() => {
+      pendingDisconnects.delete(graceKey);
 
-    io.to(instanceId).emit("STATE_UPDATE", room);
+      const r = rooms.get(instanceId);
+      if (!r || !r.participants[userId]) return; // already cleaned up or rejoined
+
+      // Full cleanup: release owned items, remove participant
+      for (const item of Object.values(r.items)) {
+        if (item.ownedBy === userId) {
+          item.ownedBy = null;
+        }
+      }
+      delete r.participants[userId];
+
+      const activeSockets = roomSockets.get(instanceId);
+      if (!activeSockets || activeSockets.size === 0) {
+        rooms.delete(instanceId);
+        roomSockets.delete(instanceId);
+        console.log(`[room:${instanceId}] empty after grace period, deleted`);
+        return;
+      }
+
+      // Host re-election
+      if (r.hostId === userId) {
+        const remainingUsers = [...new Set([...activeSockets.values()])];
+        if (remainingUsers.length === 0) {
+          rooms.delete(instanceId);
+          roomSockets.delete(instanceId);
+          console.log(`[room:${instanceId}] empty after grace period, deleted`);
+          return;
+        }
+        r.hostId = remainingUsers[Math.floor(Math.random() * remainingUsers.length)];
+        console.log(`[room:${instanceId}] new host after grace period: ${r.hostId}`);
+      }
+
+      console.log(`[room:${instanceId}] ${userId} evicted after grace period`);
+      io.to(instanceId).emit("STATE_UPDATE", r);
+    }, GRACE_MS);
+
+    pendingDisconnects.set(graceKey, timer);
   });
 });
 

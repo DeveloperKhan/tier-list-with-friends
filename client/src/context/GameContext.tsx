@@ -20,7 +20,15 @@ export type Participant = {
 
 export type ImageItem = {
   id: string;
-  dataUrl: string;
+  /** How the image is sourced:
+   *  - 'upload'    → locally uploaded file, encoded as base64 in `dataUrl`
+   *  - 'tiermaker' → TierMaker CDN reference stored in `imageUrl`
+   *  - 'text'      → rendered text tile, content stored in `text`
+   */
+  kind: 'upload' | 'tiermaker' | 'text';
+  dataUrl: string;   // base64 data URI — only populated for kind='upload'
+  imageUrl: string;  // TierMaker relative path — only populated for kind='tiermaker'
+  text: string;      // tile text — only populated for kind='text'
   fileName: string;
   uploadedBy: string;
   lockedBy: string | null;
@@ -56,6 +64,11 @@ type GameContextValue = {
   isHost: boolean;
   /** Non-null error string if connection was rejected */
   rejectionReason: string | null;
+  /** Set when the server rejects a lock attempt on an item */
+  lockRejected: { itemId: string; lockedBy: string } | null;
+  clearLockRejected: () => void;
+  /** True after the host ends the session via END_SESSION */
+  sessionEnded: boolean;
 };
 
 const GameContext = createContext<GameContextValue>({
@@ -64,6 +77,9 @@ const GameContext = createContext<GameContextValue>({
   currentUserId: '',
   isHost: false,
   rejectionReason: null,
+  lockRejected: null,
+  clearLockRejected: () => {},
+  sessionEnded: false,
 });
 
 // ---------------------------------------------------------------------------
@@ -75,6 +91,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [lockRejected, setLockRejected] = useState<{ itemId: string; lockedBy: string } | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
   // Stable refs so the connect handler always sees fresh values without
   // needing to be re-registered (avoids stale closures on reconnect).
   const discordRef = useRef(discord);
@@ -93,12 +111,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const sock = io(socketUrl!, {
       path: '/ws',
+      // Start with polling so a Socket.IO session is established before upgrading.
+      // WebSocket-first fails under heavy image-proxy load: the upgrade request
+      // races with many concurrent HTTP requests and can fail, causing a
+      // disconnect → reconnect loop. Once polling is stable it auto-upgrades.
       transports: ['polling', 'websocket'],
     });
 
     // Emitted on initial connect AND every auto-reconnect. The server
     // handles duplicate userId joins idempotently (no duplicate participants).
     sock.on('connect', () => {
+      // Do NOT clear roomState here. The server keeps the room alive during
+      // the grace period, so the stale state is still valid and will be
+      // refreshed by the incoming STATE_UPDATE. Nulling it would unmount
+      // SetupPage and destroy the user's local draft (items, tiers, title).
       const d = discordRef.current;
       if (d.status !== 'ready') return;
       const instanceId = d.discordSdk.instanceId;
@@ -122,6 +148,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       console.warn(`[game] template partially loaded (${loaded}/${total}):`, reason);
     });
 
+    sock.on('LOCK_REJECTED', ({ itemId, lockedBy }: { itemId: string; lockedBy: string }) => {
+      setLockRejected({ itemId, lockedBy });
+    });
+
+    sock.on('PHASE_RESET', () => {
+      setRoomState(null);
+      setSessionEnded(true);
+    });
+
     sock.on('connect_error', (err) => {
       console.error('[socket] connect error:', err.message);
     });
@@ -139,7 +174,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const isHost = !!roomState && roomState.hostId === currentUserId;
 
   return (
-    <GameContext.Provider value={{ roomState, socket, currentUserId, isHost, rejectionReason }}>
+    <GameContext.Provider value={{
+      roomState, socket, currentUserId, isHost, rejectionReason,
+      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded,
+    }}>
       {children}
     </GameContext.Provider>
   );

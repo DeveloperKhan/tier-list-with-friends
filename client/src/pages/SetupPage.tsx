@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGame, type Tier } from '@/context/GameContext';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel, SectionLabel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
-import { TierMakerBrowser } from '@/components/TierMakerBrowser';
-import { cn } from '@/lib/utils';
-import { ImageIcon, Hourglass, FolderOpen, Gamepad2 } from 'lucide-react';
+import { TierMakerBrowser, type TierMakerTemplateItem } from '@/components/TierMakerBrowser';
+import { cn, getItemSrc } from '@/lib/utils';
+import { ImageIcon, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 import { SetupBackground } from '@/components/ui/SetupBackground';
 
@@ -15,9 +15,11 @@ import { SetupBackground } from '@/components/ui/SetupBackground';
 
 type LocalItem = {
   id: string;
-  dataUrl: string;
+  kind: 'upload' | 'tiermaker' | 'text';
+  dataUrl: string;   // base64 — only for kind='upload'
+  imageUrl: string;  // TierMaker path — only for kind='tiermaker'
+  text: string;      // tile label — only for kind='text'
   fileName: string;
-  label?: string; // set for text items
 };
 
 // ---------------------------------------------------------------------------
@@ -29,41 +31,6 @@ const TIER_PALETTE = [
   '#1E90FF', '#9932CC', '#FF69B4', '#00CED1',
 ];
 
-function textToDataUrl(text: string): string {
-  const size = 120;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-
-  // Background
-  ctx.fillStyle = '#1e1e2e';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, size, size, 12);
-  ctx.fill();
-
-  // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(0, 0, size, size, 12);
-  ctx.stroke();
-
-  // Fit text into the tile
-  const maxWidth = 100;
-  let fontSize = 22;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  while (ctx.measureText(text).width > maxWidth && fontSize > 9) {
-    fontSize -= 1;
-    ctx.font = `bold ${fontSize}px sans-serif`;
-  }
-  ctx.fillText(text, size / 2, size / 2, maxWidth);
-
-  return canvas.toDataURL('image/png');
-}
 
 function createDefaultTiers(): Tier[] {
   const defaults = [
@@ -172,22 +139,9 @@ function ImageGrid({
         {bankItemIds.map((id) => {
           const item = items[id];
           if (!item) return null;
-          if (item.label) {
-            return (
-              <div key={id} className="group relative aspect-square rounded-xl overflow-hidden bg-white/10 flex items-center justify-center p-1">
-                <span className="text-white font-bold text-center break-words leading-tight text-xs pointer-events-none select-none">
-                  {item.label}
-                </span>
-                <button
-                  onClick={() => onRemove(id)}
-                  className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-lg"
-                >✕</button>
-              </div>
-            );
-          }
           return (
             <div key={id} className="group relative aspect-square rounded-xl overflow-hidden bg-white/10">
-              <img src={item.dataUrl} alt="" className="h-full w-full object-cover" />
+              <img src={getItemSrc(item)} alt={item.fileName} className="h-full w-full object-cover" />
               <button
                 onClick={() => onRemove(id)}
                 className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-lg"
@@ -208,7 +162,7 @@ function TierMakerModal({
   onLoad,
   onClose,
 }: {
-  onLoad: (items: Array<{ dataUrl: string; fileName: string }>) => void;
+  onLoad: (items: TierMakerTemplateItem[]) => void;
   onClose: () => void;
 }) {
   return (
@@ -243,6 +197,32 @@ export function SetupPage() {
   const [uploading, setUploading] = useState(false);
   const [showTierMaker, setShowTierMaker] = useState(false);
   const [textInput, setTextInput] = useState('');
+  const [isStarting, setIsStarting] = useState(false);
+
+  // When the socket reconnects while we're waiting for START_GAME to be
+  // confirmed, automatically re-emit it so the user doesn't have to click again.
+  const isStartingRef = useRef(false);
+  isStartingRef.current = isStarting;
+
+  useEffect(() => {
+    if (!socket) return;
+    const s = socket;
+    function onReconnect() {
+      if (!isStartingRef.current) return;
+      // Re-emit START_GAME on the fresh socket so the server can process it.
+      s.emit('START_GAME', {
+        instanceId: roomState?.instanceId,
+        userId: currentUserId,
+        title,
+        tiers,
+        items,
+        bankItemIds,
+      });
+    }
+    s.on('connect', onReconnect);
+    return () => { s.off('connect', onReconnect); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -300,7 +280,7 @@ export function SetupPage() {
             const id = crypto.randomUUID();
             setItems((prev) => {
               if (Object.keys(prev).length >= 100) return prev;
-              return { ...prev, [id]: { id, dataUrl, fileName: file.name } };
+              return { ...prev, [id]: { id, kind: 'upload' as const, dataUrl, imageUrl: '', text: '', fileName: file.name } };
             });
             setBankItemIds((prev) => (prev.length < 100 ? [...prev, id] : prev));
           }
@@ -340,7 +320,7 @@ export function SetupPage() {
     for (const label of labels) {
       if (currentCount + newEntries.length >= 100) break;
       const id = crypto.randomUUID();
-      newEntries.push({ id, dataUrl: textToDataUrl(label), fileName: label, label });
+      newEntries.push({ id, kind: 'text', dataUrl: '', imageUrl: '', text: label, fileName: label });
     }
 
     setItems((prev) => {
@@ -352,16 +332,15 @@ export function SetupPage() {
     setTextInput('');
   }
 
-  function loadTemplate(loaded: Array<{ dataUrl: string; fileName: string }>) {
+  function loadTemplate(loaded: Array<{ kind: 'tiermaker'; imageUrl: string; fileName: string }>) {
     const currentCount = Object.keys(items).length;
     if (currentCount >= 100) return;
 
     const newEntries: LocalItem[] = [];
     for (const item of loaded) {
       if (currentCount + newEntries.length >= 100) break;
-      if (item.dataUrl.length > 200_000) continue;
       const id = crypto.randomUUID();
-      newEntries.push({ id, dataUrl: item.dataUrl, fileName: item.fileName });
+      newEntries.push({ id, kind: 'tiermaker', dataUrl: '', imageUrl: item.imageUrl, text: '', fileName: item.fileName });
     }
 
     setItems((prev) => {
@@ -375,7 +354,15 @@ export function SetupPage() {
   // ── Submit ────────────────────────────────────────────────────────────────
 
   function handleStartGame() {
-    socket?.emit('START_GAME', { title, tiers, items, bankItemIds });
+    setIsStarting(true);
+    socket?.emit('START_GAME', {
+      instanceId: roomState?.instanceId,
+      userId: currentUserId,
+      title,
+      tiers,
+      items,
+      bankItemIds,
+    });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -481,7 +468,7 @@ export function SetupPage() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     {uploading
-                      ? <><Hourglass className="text-yellow-400 inline mr-1.5" size={14} />Uploading…</>
+                      ? 'Uploading…'
                       : <><FolderOpen className="text-amber-400 inline mr-1.5" size={14} />Upload Files</>}
                   </GameButton>
                   <GameButton
@@ -536,10 +523,15 @@ export function SetupPage() {
                 variant="success"
                 size="lg"
                 className="w-full"
-                disabled={itemCount === 0}
+                disabled={itemCount === 0 || isStarting}
                 onClick={handleStartGame}
               >
-                Start Game!
+                {isStarting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Starting…
+                  </span>
+                ) : 'Start Game!'}
               </GameButton>
             ) : (
               <Panel className="p-4 text-center">

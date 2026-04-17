@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { GameButton } from '@/components/ui/GameButton';
-import { Gamepad2, Hourglass, CircleCheck } from 'lucide-react';
+import { Gamepad2, CircleCheck } from 'lucide-react';
 
 type SearchResult = {
   url: string;
@@ -24,20 +24,17 @@ function proxyImg(tiermakerUrl: string) {
   return `/api/tiermaker/image?url=${encodeURIComponent(tiermakerUrl)}`;
 }
 
-async function imageUrlToBase64(imageUrl: string): Promise<string> {
-  const proxyUrl = `/api/tiermaker/image?url=${encodeURIComponent(imageUrl)}`;
-  const res = await fetch(proxyUrl);
-  const blob = await res.blob();
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(blob);
-  });
-}
+
+export type TierMakerTemplateItem = {
+  kind: 'tiermaker';
+  imageUrl: string;
+  fileName: string;
+};
 
 interface TierMakerBrowserProps {
-  /** Called with base64 items when the user confirms loading a template */
-  onLoadTemplate?: (items: Array<{ dataUrl: string; fileName: string }>) => void;
+  /** Called with TierMaker URL-reference items when the user confirms a template.
+   *  No base64 conversion — images are fetched on demand via the proxy. */
+  onLoadTemplate?: (items: TierMakerTemplateItem[]) => void;
   /** Called when the modal should close without loading */
   onClose?: () => void;
 }
@@ -48,7 +45,6 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
   const [selected, setSelected] = useState<Template | null>(null);
   const [searchState, setSearchState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [templateState, setTemplateState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [loadState, setLoadState] = useState<'idle' | 'loading'>('idle');
   const [searchError, setSearchError] = useState('');
   const [templateError, setTemplateError] = useState('');
 
@@ -91,21 +87,16 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
     }
   }
 
-  async function handleLoad() {
+  function handleLoad() {
     if (!selected || !onLoadTemplate) return;
-    setLoadState('loading');
-
-    try {
-      const converted = await Promise.all(
-        selected.items.map(async (item) => ({
-          dataUrl: await imageUrlToBase64(item.imageUrl),
-          fileName: `${item.id}.jpg`,
-        }))
-      );
-      onLoadTemplate(converted);
-    } finally {
-      setLoadState('idle');
-    }
+    // Pass URL references — no base64 conversion needed.
+    // Images are fetched on demand via /api/tiermaker/image proxy.
+    const items: TierMakerTemplateItem[] = selected.items.slice(0, 100).map((item) => ({
+      kind: 'tiermaker',
+      imageUrl: item.imageUrl,
+      fileName: `${item.id}.jpg`,
+    }));
+    onLoadTemplate(items);
   }
 
   return (
@@ -229,14 +220,10 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
                     variant="success"
                     size="md"
                     className="w-full"
-                    disabled={loadState === 'loading'}
                     onClick={handleLoad}
                   >
-                    {loadState === 'loading' ? (
-                      <><Hourglass className="text-yellow-400 inline mr-1.5" size={14} />Converting images…</>
-                    ) : (
-                      <><CircleCheck className="text-green-400 inline mr-1.5" size={14} />Load {selected.items.length} Images</>
-                    )}
+                    <CircleCheck className="text-green-400 inline mr-1.5" size={14} />
+                    Load {selected.items.length} Images
                   </GameButton>
                 </div>
               )}
