@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n sidecar,server,client,tunnel -c magenta,blue,green,yellow \"npm start --prefix sidecar\" \"npm start --prefix server\" \"npm run dev --prefix client\" \"node scripts/tunnel.js\"",
+    "dev": "concurrently -n sidecar,server,client -c magenta,blue,green \"npm start --prefix sidecar\" \"npm start --prefix server\" \"npm run dev --prefix client\"",
     "dev:server": "concurrently -n sidecar,server -c magenta,blue \"npm start --prefix sidecar\" \"npm start --prefix server\""
   },
   "devDependencies": {
