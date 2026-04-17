@@ -231,10 +231,11 @@ function BankDropZone({
       <div
         ref={setNodeRef}
         className={cn(
-          'flex h-24 flex-shrink-0 items-center gap-1.5 overflow-x-auto border-t-2 border-white/10 bg-game-panel/60 px-2 transition-colors',
+          'flex flex-shrink-0 items-center gap-1.5 overflow-x-auto border-t-2 border-white/10 bg-game-panel/60 px-2 transition-colors',
           'game-scroll',
           isOver && 'border-purple-400/50 bg-purple-900/20',
         )}
+        style={{ height: 'calc(6rem + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {/* Controls */}
         <div className="flex flex-shrink-0 flex-col gap-1">
@@ -598,9 +599,12 @@ export function PlayingPage() {
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="flex h-full flex-col overflow-hidden bg-game-bg" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {/* Top gradient strip */}
-          <div className="h-1 w-full flex-none bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500" />
+        <div className="flex h-full flex-col overflow-hidden bg-game-bg">
+          {/* Top gradient strip — expands to cover iOS status bar safe area */}
+          <div
+            className="w-full flex-none bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500"
+            style={{ height: 'calc(4px + env(safe-area-inset-top))' }}
+          />
 
           {/* Header */}
           <header className="flex flex-none items-center justify-between gap-3 border-b border-white/10 bg-game-bg/80 px-4 py-2 backdrop-blur-sm">

@@ -371,7 +371,10 @@ export function SetupPage() {
     <>
       <div className="relative flex h-full flex-col bg-game-bg overflow-hidden">
         <SetupBackground />
-        <div className="h-1 w-full bg-gradient-to-r from-game-pink via-game-purple to-game-cyan flex-none" />
+        <div
+          className="w-full bg-gradient-to-r from-game-pink via-game-purple to-game-cyan flex-none"
+          style={{ height: 'calc(4px + env(safe-area-inset-top))' }}
+        />
 
         <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
@@ -541,7 +544,7 @@ export function SetupPage() {
               </Panel>
             )}
 
-            <div className="h-4" />
+            <div style={{ height: 'calc(1rem + env(safe-area-inset-bottom))' }} />
           </div>
         </main>
       </div>
