@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { GameButton } from '@/components/ui/GameButton';
+import { Gamepad2, Hourglass, CircleCheck } from 'lucide-react';
 
 type SearchResult = {
   url: string;
@@ -112,8 +113,9 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
       {/* Header */}
       <div className="flex-none border-b border-white/10 px-4 py-3">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-black text-white">
-            🎮 TierMaker Templates
+          <h2 className="text-base font-black text-white flex items-center gap-2">
+            <Gamepad2 className="text-purple-400" size={16} />
+            TierMaker Templates
           </h2>
           {onClose && (
             <button
@@ -230,9 +232,11 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
                     disabled={loadState === 'loading'}
                     onClick={handleLoad}
                   >
-                    {loadState === 'loading'
-                      ? '⏳ Converting images…'
-                      : `✅ Load ${selected.items.length} Images`}
+                    {loadState === 'loading' ? (
+                      <><Hourglass className="text-yellow-400 inline mr-1.5" size={14} />Converting images…</>
+                    ) : (
+                      <><CircleCheck className="text-green-400 inline mr-1.5" size={14} />Load {selected.items.length} Images</>
+                    )}
                   </GameButton>
                 </div>
               )}

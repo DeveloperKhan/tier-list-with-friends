@@ -2,6 +2,7 @@ import { useDiscord, isInsideDiscord } from '@/context/DiscordContext';
 import { GameProvider, useGame } from '@/context/GameContext';
 import { SetupPage } from '@/pages/SetupPage';
 import { WaitingPage } from '@/pages/WaitingPage';
+import { Ban, TriangleAlert, Gamepad2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Inner app — rendered inside GameProvider, can use useGame()
@@ -14,7 +15,7 @@ function GameRouter() {
     return (
       <div className="flex h-full items-center justify-center bg-game-bg">
         <div className="rounded-2xl border-2 border-game-red/40 bg-game-red/10 p-8 text-center max-w-sm">
-          <p className="text-4xl mb-3">🚫</p>
+          <Ban className="text-red-400 mb-3 mx-auto" size={40} />
           <p className="font-black text-game-red text-lg mb-1">Couldn't join</p>
           <p className="text-sm text-white/60">{rejectionReason}</p>
         </div>
@@ -45,7 +46,10 @@ function GameRouter() {
   // PLAYING phase — placeholder until the game board is built
   return (
     <div className="flex h-full items-center justify-center bg-game-bg">
-      <p className="text-white/50 font-bold">🎮 Game board coming soon…</p>
+      <p className="text-white/50 font-bold flex items-center gap-2">
+        <Gamepad2 className="text-purple-400" size={18} />
+        Game board coming soon…
+      </p>
     </div>
   );
 }
@@ -74,7 +78,7 @@ export default function App() {
     return (
       <div className="flex h-full items-center justify-center bg-game-bg">
         <div className="rounded-2xl border-2 border-game-red/40 bg-game-red/10 p-8 text-center max-w-sm">
-          <p className="text-4xl mb-3">⚠️</p>
+          <TriangleAlert className="text-yellow-400 mb-3 mx-auto" size={40} />
           <p className="font-black text-game-red text-lg mb-1">Connection error</p>
           <p className="text-sm text-white/60">{discord.error}</p>
         </div>

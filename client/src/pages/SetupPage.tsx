@@ -5,6 +5,8 @@ import { Panel, SectionLabel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { TierMakerBrowser } from '@/components/TierMakerBrowser';
 import { cn } from '@/lib/utils';
+import { ImageIcon, Hourglass, FolderOpen, Gamepad2 } from 'lucide-react';
+import logoUrl from '/assets/square-logo.svg';
 
 // ---------------------------------------------------------------------------
 // Local-only types (never sent to server until Start Game)
@@ -384,7 +386,7 @@ export function SetupPage() {
 
         <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🏆</span>
+            <img src={logoUrl} alt="Logo" className="h-8 w-8 rounded-lg" />
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-game-purple-light">Setup</p>
               <h1 className="text-lg font-black text-white leading-tight">Tier List with Friends</h1>
@@ -463,7 +465,7 @@ export function SetupPage() {
                       : 'border-white/15 bg-white/3 hover:border-white/25',
                   )}
                 >
-                  <p className="text-2xl mb-1">🖼️</p>
+                  <ImageIcon className="text-indigo-400 mx-auto mb-1" size={28} />
                   <p className="text-sm font-bold text-white/60">Drop images here</p>
                   <p className="text-xs text-white/30 mt-0.5">or use the buttons below</p>
                 </div>
@@ -476,7 +478,9 @@ export function SetupPage() {
                     disabled={uploading || itemCount >= 100}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    {uploading ? '⏳ Uploading…' : '📁 Upload Files'}
+                    {uploading
+                      ? <><Hourglass className="text-yellow-400 inline mr-1.5" size={14} />Uploading…</>
+                      : <><FolderOpen className="text-amber-400 inline mr-1.5" size={14} />Upload Files</>}
                   </GameButton>
                   <GameButton
                     variant="primary"
@@ -485,7 +489,7 @@ export function SetupPage() {
                     disabled={itemCount >= 100}
                     onClick={() => setShowTierMaker(true)}
                   >
-                    🎮 TierMaker
+                    <Gamepad2 className="text-purple-400 inline mr-1.5" size={14} />TierMaker
                   </GameButton>
                 </div>
 
@@ -533,7 +537,7 @@ export function SetupPage() {
                 disabled={itemCount === 0}
                 onClick={handleStartGame}
               >
-                🚀 Start Game!
+                Start Game!
               </GameButton>
             ) : (
               <Panel className="p-4 text-center">

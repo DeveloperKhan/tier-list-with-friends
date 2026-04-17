@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { Participant } from '@/context/GameContext';
+import { Users, Crown } from 'lucide-react';
 
 interface PlayerListProps {
   participants: Record<string, Participant>;
@@ -62,7 +63,7 @@ export function PlayerList({
           'hover:border-game-purple/60 hover:bg-game-panel transition-colors',
         )}
       >
-        <span className="text-base">👥</span>
+        <Users className="text-blue-400" size={16} />
         <span>{count} {count === 1 ? 'Player' : 'Players'}</span>
         <span
           className={cn(
@@ -98,9 +99,7 @@ export function PlayerList({
                   </p>
                 </div>
                 {p.userId === hostId && (
-                  <span title="Host" className="flex-shrink-0 text-base">
-                    👑
-                  </span>
+                  <span title="Host" className="flex-shrink-0"><Crown className="text-yellow-400" size={16} /></span>
                 )}
               </li>
             ))}

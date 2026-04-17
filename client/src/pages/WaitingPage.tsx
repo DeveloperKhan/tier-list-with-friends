@@ -1,13 +1,15 @@
 import { useGame } from '@/context/GameContext';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { Panel } from '@/components/ui/Panel';
+import { Hourglass, Crown } from 'lucide-react';
+import logoUrl from '/assets/square-logo.svg';
 
 const WAITING_MESSAGES = [
   'The host is cooking up something epic…',
   'Get ready — tiers are being arranged!',
   'Grab a snack, the ranking is about to begin!',
-  'Host is choosing the best images just for you 🎨',
-  'Almost there… the tier list gods are working their magic ✨',
+  'Host is choosing the best images just for you.',
+  'Almost there… the tier list gods are working their magic.',
 ];
 
 export function WaitingPage() {
@@ -33,7 +35,7 @@ export function WaitingPage() {
       {/* Header */}
       <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🏆</span>
+          <img src={logoUrl} alt="Logo" className="h-8 w-8 rounded-lg" />
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-game-purple-light">Lobby</p>
             <h1 className="text-lg font-black text-white leading-tight">Tier List with Friends</h1>
@@ -51,7 +53,7 @@ export function WaitingPage() {
         <div className="text-center max-w-sm space-y-6">
           {/* Animated trophy/hourglass */}
           <div className="flex justify-center">
-            <div className="animate-float text-7xl select-none">⏳</div>
+            <Hourglass className="animate-float text-game-purple" size={80} />
           </div>
 
           {/* Status text */}
@@ -66,7 +68,7 @@ export function WaitingPage() {
 
           {/* Host info */}
           <Panel className="px-5 py-3 inline-flex items-center gap-3 mx-auto">
-            <span className="text-xl">👑</span>
+            <Crown className="text-yellow-400" size={20} />
             <div className="text-left">
               <p className="text-xs text-white/40 font-bold uppercase tracking-wide">Host</p>
               <p className="text-sm font-black text-white">{hostName}</p>
