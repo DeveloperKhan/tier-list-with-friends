@@ -93,7 +93,7 @@ function DraggableItem({
 {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
         'relative aspect-square w-14 flex-shrink-0 overflow-hidden rounded-lg bg-white/10',
-        canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing',
+        canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing touch-none',
         isLockedByOther && 'pointer-events-none opacity-50',
         isOwnedByOther && 'pointer-events-none opacity-75 ring-1 ring-white/20',
         isDragging && !isDragOverlay && 'opacity-0',
@@ -475,7 +475,7 @@ export function PlayingPage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 10 } }),
   );
 
   // Handle lock rejection
