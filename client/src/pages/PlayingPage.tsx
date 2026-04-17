@@ -68,11 +68,9 @@ function DraggableItem({
     disabled: !canInteract || isDragOverlay,
   });
 
-  const style = {
-    ...(transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : {}),
-    WebkitUserDrag: 'none',
-    userSelect: 'none',
-  } as React.CSSProperties;
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
 
   const blockerName =
     isLockedByOther
@@ -92,9 +90,7 @@ function DraggableItem({
       ref={setNodeRef}
       style={style}
       title={tooltip}
-      onDragStart={(e) => e.preventDefault()}
-      onDragOver={(e) => e.preventDefault()}
-      {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
+{...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
         'relative aspect-square w-14 flex-shrink-0 overflow-hidden rounded-lg bg-white/10',
         canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing',
@@ -481,13 +477,6 @@ export function PlayingPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  // Suppress native drag ghost fly-back on all browsers
-  useEffect(() => {
-    const suppress = (e: DragEvent) => e.preventDefault();
-    document.addEventListener('dragover', suppress);
-    return () => document.removeEventListener('dragover', suppress);
-  }, []);
-
   // Handle lock rejection
   useEffect(() => {
     if (!lockRejected || !roomState) return;
@@ -609,7 +598,7 @@ export function PlayingPage() {
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="flex h-full flex-col overflow-hidden bg-game-bg">
+        <div className="flex h-full flex-col overflow-hidden bg-game-bg" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {/* Top gradient strip */}
           <div className="h-1 w-full flex-none bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500" />
 
