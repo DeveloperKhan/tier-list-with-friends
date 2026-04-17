@@ -52,6 +52,7 @@ function DraggableItem({
   currentUserId,
   participants,
   isDragOverlay = false,
+
 }: {
   item: ImageItem;
   currentUserId: string;
@@ -67,9 +68,11 @@ function DraggableItem({
     disabled: !canInteract || isDragOverlay,
   });
 
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
+  const style = {
+    ...(transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : {}),
+    WebkitUserDrag: 'none',
+    userSelect: 'none',
+  } as React.CSSProperties;
 
   const blockerName =
     isLockedByOther
@@ -89,6 +92,8 @@ function DraggableItem({
       ref={setNodeRef}
       style={style}
       title={tooltip}
+      onDragStart={(e) => e.preventDefault()}
+      onDragOver={(e) => e.preventDefault()}
       {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
         'relative aspect-square w-14 flex-shrink-0 overflow-hidden rounded-lg bg-white/10',
@@ -112,6 +117,15 @@ function DraggableItem({
 // ---------------------------------------------------------------------------
 // TierDropZone
 // ---------------------------------------------------------------------------
+
+function TierItemSlot({ itemId, children }: { itemId: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `slot:${itemId}` });
+  return (
+    <div ref={setNodeRef} className={cn('rounded-lg', isOver && 'ring-2 ring-blue-400')}>
+      {children}
+    </div>
+  );
+}
 
 function TierDropZone({
   tier,
@@ -138,12 +152,14 @@ function TierDropZone({
         const item = items[id];
         if (!item) return null;
         return (
-          <DraggableItem
-            key={id}
-            item={item}
-            currentUserId={currentUserId}
-            participants={participants}
-          />
+          <TierItemSlot key={id} itemId={id}>
+            <DraggableItem
+              item={item}
+              currentUserId={currentUserId}
+              participants={participants}
+
+            />
+          </TierItemSlot>
         );
       })}
     </div>
@@ -258,6 +274,7 @@ function BankDropZone({
               item={item}
               currentUserId={currentUserId}
               participants={participants}
+
             />
           );
         })}
@@ -464,6 +481,13 @@ export function PlayingPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
+  // Suppress native drag ghost fly-back on all browsers
+  useEffect(() => {
+    const suppress = (e: DragEvent) => e.preventDefault();
+    document.addEventListener('dragover', suppress);
+    return () => document.removeEventListener('dragover', suppress);
+  }, []);
+
   // Handle lock rejection
   useEffect(() => {
     if (!lockRejected || !roomState) return;
@@ -497,6 +521,15 @@ export function PlayingPage() {
 
     if (overId === 'bank') {
       socket!.emit('MOVE_ITEM', { itemId: active.id, destination: { type: 'bank' } });
+    } else if (overId.startsWith('slot:')) {
+      const targetItemId = overId.slice(5);
+      const tier = roomState!.tiers.find((t) => t.itemIds.includes(targetItemId));
+      if (tier) {
+        const index = tier.itemIds.indexOf(targetItemId);
+        socket!.emit('MOVE_ITEM', { itemId: active.id, destination: { type: 'tier', tierId: tier.id, index } });
+      } else {
+        socket!.emit('UNLOCK_ITEM', { itemId: active.id });
+      }
     } else {
       const tier = roomState!.tiers.find((t) => t.id === overId);
       if (tier) {

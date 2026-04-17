@@ -69,6 +69,8 @@ type GameContextValue = {
   clearLockRejected: () => void;
   /** True after the host ends the session via END_SESSION */
   sessionEnded: boolean;
+  /** Re-join the room after a session ends, starting a fresh game */
+  resetSession: () => void;
 };
 
 const GameContext = createContext<GameContextValue>({
@@ -80,6 +82,7 @@ const GameContext = createContext<GameContextValue>({
   lockRejected: null,
   clearLockRejected: () => {},
   sessionEnded: false,
+  resetSession: () => {},
 });
 
 // ---------------------------------------------------------------------------
@@ -97,6 +100,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // needing to be re-registered (avoids stale closures on reconnect).
   const discordRef = useRef(discord);
   discordRef.current = discord;
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     if (discord.status !== 'ready') return;
@@ -162,13 +166,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
 
     setSocket(sock);
+    socketRef.current = sock;
 
     return () => {
       sock.disconnect();
       setSocket(null);
+      socketRef.current = null;
       setRoomState(null);
     };
   }, [discord.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function resetSession() {
+    setSessionEnded(false);
+    setRoomState(null);
+    const d = discordRef.current;
+    const sock = socketRef.current;
+    if (sock && d.status === 'ready') {
+      const { id: userId, username, avatar } = d.user;
+      sock.emit('JOIN_ROOM', { instanceId: d.discordSdk.instanceId, userId, username, avatar });
+    }
+  }
 
   const currentUserId = discord.status === 'ready' ? discord.user.id : '';
   const isHost = !!roomState && roomState.hostId === currentUserId;
@@ -176,7 +193,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       roomState, socket, currentUserId, isHost, rejectionReason,
-      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded,
+      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, resetSession,
     }}>
       {children}
     </GameContext.Provider>
