@@ -521,6 +521,37 @@ io.on("connection", (socket) => {
     io.to(info.instanceId).emit("STATE_UPDATE", room);
   });
 
+  // ── ADD_TEXT_ITEM (any player, PLAYING phase) ────────────────────────────
+  socket.on("ADD_TEXT_ITEM", ({ text }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const room = rooms.get(info.instanceId);
+    if (!room || room.phase !== "PLAYING") return;
+
+    if (typeof text !== "string" || !text.trim()) return;
+    if (Object.keys(room.items).length >= MAX_ITEMS) {
+      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${MAX_ITEMS}-item limit.` });
+      return;
+    }
+
+    const label = String(text).trim().slice(0, 200);
+    const id = randomUUID();
+    room.items[id] = {
+      id,
+      kind: "text",
+      dataUrl: "",
+      imageUrl: "",
+      text: label,
+      fileName: label,
+      uploadedBy: info.userId,
+      lockedBy: null,
+      ownedBy: null,
+    };
+    room.bankItemIds.push(id);
+
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
   // ── LOAD_TEMPLATE (any player) ───────────────────────────────────────────
   socket.on("LOAD_TEMPLATE", ({ items: incoming }) => {
     const info = socketInfo.get(socket.id);

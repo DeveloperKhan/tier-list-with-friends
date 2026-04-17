@@ -23,9 +23,8 @@ import { useGame, type ImageItem, type Participant, type Tier } from '@/context/
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
-import { TierMakerBrowser } from '@/components/TierMakerBrowser';
 import { cn, getItemSrc } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Download, FolderOpen, Layers, LogOut, Plus, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Layers, LogOut, Plus, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -147,11 +146,47 @@ function TierDropZone({
           />
         );
       })}
-      {tier.itemIds.length === 0 && !isOver && (
-        <span className="select-none px-2 text-xs font-semibold text-white/20">
-          Drop here
-        </span>
-      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AddTextPopup
+// ---------------------------------------------------------------------------
+
+function AddTextPopup({ onAdd, onClose }: { onAdd: (text: string) => void; onClose: () => void }) {
+  const [value, setValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  function submit() {
+    value.split(',').map((s) => s.trim()).filter(Boolean).forEach(onAdd);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center pb-32 bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-72 rounded-xl border border-white/10 bg-game-panel p-3 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="mb-2 text-xs font-bold text-white/50">Add text items (comma-separated)</p>
+        <div className="flex gap-1.5">
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
+            placeholder="e.g. Apple, Banana"
+            className="game-input flex-1 py-1 text-xs"
+          />
+          <GameButton variant="primary" size="sm" onClick={submit} disabled={!value.trim()}>
+            <Plus size={13} />
+          </GameButton>
+        </div>
+      </div>
     </div>
   );
 }
@@ -166,81 +201,78 @@ function BankDropZone({
   currentUserId,
   participants,
   onUploadFiles,
-  onOpenTierMaker,
+  onAddText,
 }: {
   bankItemIds: string[];
   items: Record<string, ImageItem>;
   currentUserId: string;
   participants: Record<string, Participant>;
   onUploadFiles: (files: FileList) => void;
-  onOpenTierMaker: () => void;
+  onAddText: (text: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'bank' });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showTextPopup, setShowTextPopup] = useState(false);
 
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'flex h-28 flex-shrink-0 items-center gap-2 overflow-x-auto border-t-2 border-white/10 bg-game-panel/60 px-3 transition-colors',
-        'game-scroll',
-        isOver && 'border-purple-400/50 bg-purple-900/20',
-      )}
-    >
-      {/* Upload controls */}
-      <div className="flex flex-shrink-0 flex-col gap-1">
-        <GameButton
-          variant="ghost"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          title="Upload images"
-        >
-          <Upload size={13} />
-        </GameButton>
-        <GameButton
-          variant="primary"
-          size="sm"
-          onClick={onOpenTierMaker}
-          title="Load TierMaker template"
-        >
-          <FolderOpen size={13} />
-        </GameButton>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          onChange={(e) => {
-            if (e.target.files) onUploadFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
+    <>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex h-24 flex-shrink-0 items-center gap-1.5 overflow-x-auto border-t-2 border-white/10 bg-game-panel/60 px-2 transition-colors',
+          'game-scroll',
+          isOver && 'border-purple-400/50 bg-purple-900/20',
+        )}
+      >
+        {/* Controls */}
+        <div className="flex flex-shrink-0 flex-col gap-1">
+          <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title="Upload images">
+            <Upload size={13} />
+          </GameButton>
+          <GameButton variant="ghost" size="sm" onClick={() => setShowTextPopup(true)} title="Add text items">
+            <Type size={13} />
+          </GameButton>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            onChange={(e) => {
+              if (e.target.files) onUploadFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+        </div>
+
+        {/* Divider */}
+        <div className="h-14 w-px flex-shrink-0 bg-white/10" />
+
+        {/* Items */}
+        {bankItemIds.map((id) => {
+          const item = items[id];
+          if (!item) return null;
+          return (
+            <DraggableItem
+              key={id}
+              item={item}
+              currentUserId={currentUserId}
+              participants={participants}
+            />
+          );
+        })}
+
+        {bankItemIds.length === 0 && (
+          <span className="select-none text-xs font-semibold text-white/20">
+            All items placed
+          </span>
+        )}
       </div>
 
-      {/* Divider */}
-      <div className="h-16 w-px flex-shrink-0 bg-white/10" />
-
-      {/* Items */}
-      {bankItemIds.map((id) => {
-        const item = items[id];
-        if (!item) return null;
-        return (
-          <DraggableItem
-            key={id}
-            item={item}
-            currentUserId={currentUserId}
-            participants={participants}
-          />
-        );
-      })}
-
-      {bankItemIds.length === 0 && (
-        <span className="select-none text-xs font-semibold text-white/20">
-          All items placed
-        </span>
+      {showTextPopup && (
+        <AddTextPopup onAdd={onAddText} onClose={() => setShowTextPopup(false)} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -280,7 +312,7 @@ function EditTiersModal({
   }
 
   function handleRename(id: string, label: string) {
-    setLocalTiers((prev) => prev.map((t) => (t.id === id ? { ...t, label: label.slice(0, 10) } : t)));
+    setLocalTiers((prev) => prev.map((t) => (t.id === id ? { ...t, label: label.slice(0, 50) } : t)));
   }
 
   function handleRecolor(id: string, color: string) {
@@ -333,7 +365,7 @@ function EditTiersModal({
               <input
                 type="text"
                 value={tier.label}
-                maxLength={10}
+                maxLength={50}
                 className="game-input min-w-0 flex-1 py-1 text-sm"
                 onChange={(e) => handleRename(tier.id, e.target.value)}
               />
@@ -423,7 +455,6 @@ export function PlayingPage() {
   const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected } = useGame();
   const [activeItem, setActiveItem] = useState<ImageItem | null>(null);
   const [showEditTiers, setShowEditTiers] = useState(false);
-  const [showTierMaker, setShowTierMaker] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const tierListRef = useRef<HTMLDivElement>(null);
@@ -530,9 +561,8 @@ export function PlayingPage() {
     }
   }
 
-  function handleLoadTemplate(templateItems: Array<{ kind: 'tiermaker'; imageUrl: string; fileName: string }>) {
-    socket!.emit('LOAD_TEMPLATE', { items: templateItems });
-    setShowTierMaker(false);
+  function handleAddText(text: string) {
+    socket!.emit('ADD_TEXT_ITEM', { text });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -598,13 +628,24 @@ export function PlayingPage() {
               >
                 {/* Tier label */}
                 <div
-                  className="flex w-16 flex-shrink-0 items-center justify-center text-lg font-black"
+                  className="flex w-14 flex-shrink-0 items-center justify-center p-1 font-black"
                   style={{
                     backgroundColor: tier.color + '22',
                     borderRight: `4px solid ${tier.color}`,
                   }}
                 >
-                  <span style={{ color: tier.color }}>{tier.label}</span>
+                  <span
+                    style={{
+                      color: tier.color,
+                      fontSize: tier.label.length <= 2 ? '1.1rem' : tier.label.length <= 4 ? '0.8rem' : '0.6rem',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                      textAlign: 'center',
+                      lineHeight: 1.15,
+                      display: 'block',
+                      width: '100%',
+                    }}
+                  >{tier.label}</span>
                 </div>
 
                 {/* Drop zone */}
@@ -631,7 +672,7 @@ export function PlayingPage() {
             currentUserId={currentUserId}
             participants={roomState.participants}
             onUploadFiles={handleUploadFiles}
-            onOpenTierMaker={() => setShowTierMaker(true)}
+            onAddText={handleAddText}
           />
         </div>
 
@@ -655,20 +696,6 @@ export function PlayingPage() {
           onSave={handleSaveTiers}
           onClose={() => setShowEditTiers(false)}
         />
-      )}
-
-      {showTierMaker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div
-            className="relative w-full max-w-2xl overflow-hidden rounded-2xl border-2 border-game-border bg-game-bg shadow-2xl"
-            style={{ height: 'min(600px, 90vh)' }}
-          >
-            <TierMakerBrowser
-              onLoadTemplate={handleLoadTemplate}
-              onClose={() => setShowTierMaker(false)}
-            />
-          </div>
-        </div>
       )}
 
       {showEndConfirm && (
