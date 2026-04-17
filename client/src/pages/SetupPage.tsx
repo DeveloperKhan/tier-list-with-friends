@@ -14,6 +14,7 @@ type LocalItem = {
   id: string;
   dataUrl: string;
   fileName: string;
+  label?: string; // set for text items
 };
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,42 @@ const TIER_PALETTE = [
   '#FF4444', '#FF8C00', '#FFD700', '#32CD32',
   '#1E90FF', '#9932CC', '#FF69B4', '#00CED1',
 ];
+
+function textToDataUrl(text: string): string {
+  const size = 120;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  // Background
+  ctx.fillStyle = '#1e1e2e';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, 12);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, 12);
+  ctx.stroke();
+
+  // Fit text into the tile
+  const maxWidth = 100;
+  let fontSize = 22;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  while (ctx.measureText(text).width > maxWidth && fontSize > 9) {
+    fontSize -= 1;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+  }
+  ctx.fillText(text, size / 2, size / 2, maxWidth);
+
+  return canvas.toDataURL('image/png');
+}
 
 function createDefaultTiers(): Tier[] {
   const defaults = [
@@ -55,27 +92,29 @@ function TierRow({ tier, index, total, onChange, onDelete, onMove }: TierRowProp
 
   return (
     <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-      <button
-        onClick={() => colorRef.current?.click()}
-        className="h-8 w-8 flex-shrink-0 rounded-lg border-2 border-white/20 shadow-inner transition-transform hover:scale-110"
-        style={{ backgroundColor: tier.color }}
-        title="Change colour"
-      />
-      <input
-        ref={colorRef}
-        type="color"
-        value={tier.color}
-        onChange={(e) => onChange(tier.id, { color: e.target.value })}
-        className="sr-only"
-        tabIndex={-1}
-      />
+      <div className="relative h-8 w-8 flex-shrink-0">
+        <div
+          className="h-8 w-8 rounded-lg border-2 border-white/20 shadow-inner transition-transform hover:scale-110 cursor-pointer"
+          style={{ backgroundColor: tier.color }}
+          title="Change colour"
+        />
+        <input
+          ref={colorRef}
+          type="color"
+          value={tier.color}
+          onChange={(e) => onChange(tier.id, { color: e.target.value })}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          tabIndex={-1}
+        />
+      </div>
 
       <input
         type="text"
         value={tier.label}
         onChange={(e) => onChange(tier.id, { label: e.target.value })}
-        maxLength={10}
-        className="w-16 bg-transparent text-center font-black text-lg focus:outline-none focus:bg-white/5 rounded-lg px-1"
+        maxLength={50}
+        size={Math.max(2, tier.label.length)}
+        className="min-w-0 bg-transparent text-center font-black text-lg focus:outline-none focus:bg-white/5 rounded-lg px-1"
         style={{ color: tier.color }}
       />
 
@@ -107,27 +146,53 @@ function ImageGrid({
   bankItemIds,
   items,
   onRemove,
+  onClearAll,
 }: {
   bankItemIds: string[];
   items: Record<string, LocalItem>;
   onRemove: (id: string) => void;
+  onClearAll: () => void;
 }) {
   if (bankItemIds.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2 mt-3">
-      {bankItemIds.map((id) => {
-        const item = items[id];
-        if (!item) return null;
-        return (
-          <div key={id} className="group relative aspect-square rounded-xl overflow-hidden bg-white/10">
-            <img src={item.dataUrl} alt="" className="h-full w-full object-cover" />
-            <button
-              onClick={() => onRemove(id)}
-              className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-lg"
-            >✕</button>
-          </div>
-        );
-      })}
+    <div className="mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-white/40">{bankItemIds.length} item{bankItemIds.length !== 1 ? 's' : ''}</span>
+        <button
+          onClick={onClearAll}
+          className="text-xs font-bold text-game-red/70 hover:text-game-red transition-colors px-2 py-0.5 rounded-lg hover:bg-game-red/10"
+        >
+          Clear all
+        </button>
+      </div>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2">
+        {bankItemIds.map((id) => {
+          const item = items[id];
+          if (!item) return null;
+          if (item.label) {
+            return (
+              <div key={id} className="group relative aspect-square rounded-xl overflow-hidden bg-white/10 flex items-center justify-center p-1">
+                <span className="text-white font-bold text-center break-words leading-tight text-xs pointer-events-none select-none">
+                  {item.label}
+                </span>
+                <button
+                  onClick={() => onRemove(id)}
+                  className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-lg"
+                >✕</button>
+              </div>
+            );
+          }
+          return (
+            <div key={id} className="group relative aspect-square rounded-xl overflow-hidden bg-white/10">
+              <img src={item.dataUrl} alt="" className="h-full w-full object-cover" />
+              <button
+                onClick={() => onRemove(id)}
+                className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity text-white text-lg"
+              >✕</button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -174,6 +239,7 @@ export function SetupPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showTierMaker, setShowTierMaker] = useState(false);
+  const [textInput, setTextInput] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -252,21 +318,55 @@ export function SetupPage() {
     setBankItemIds((prev) => prev.filter((x) => x !== id));
   }
 
-  function loadTemplate(loaded: Array<{ dataUrl: string; fileName: string }>) {
+  function clearAllItems() {
+    setItems({});
+    setBankItemIds([]);
+  }
+
+  function addTextItems() {
+    const labels = textInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (labels.length === 0) return;
+
+    const currentCount = Object.keys(items).length;
+    if (currentCount >= 100) return;
+
+    const newEntries: LocalItem[] = [];
+    for (const label of labels) {
+      if (currentCount + newEntries.length >= 100) break;
+      const id = crypto.randomUUID();
+      newEntries.push({ id, dataUrl: textToDataUrl(label), fileName: label, label });
+    }
+
     setItems((prev) => {
-      if (Object.keys(prev).length >= 100) return prev;
       const next = { ...prev };
-      const newIds: string[] = [];
-      for (const item of loaded) {
-        if (Object.keys(next).length >= 100) break;
-        if (item.dataUrl.length > 200_000) continue;
-        const id = crypto.randomUUID();
-        next[id] = { id, dataUrl: item.dataUrl, fileName: item.fileName };
-        newIds.push(id);
-      }
-      setBankItemIds((prev) => [...prev, ...newIds]);
+      for (const entry of newEntries) next[entry.id] = entry;
       return next;
     });
+    setBankItemIds((prev) => [...prev, ...newEntries.map((e) => e.id)]);
+    setTextInput('');
+  }
+
+  function loadTemplate(loaded: Array<{ dataUrl: string; fileName: string }>) {
+    const currentCount = Object.keys(items).length;
+    if (currentCount >= 100) return;
+
+    const newEntries: LocalItem[] = [];
+    for (const item of loaded) {
+      if (currentCount + newEntries.length >= 100) break;
+      if (item.dataUrl.length > 200_000) continue;
+      const id = crypto.randomUUID();
+      newEntries.push({ id, dataUrl: item.dataUrl, fileName: item.fileName });
+    }
+
+    setItems((prev) => {
+      const next = { ...prev };
+      for (const entry of newEntries) next[entry.id] = entry;
+      return next;
+    });
+    setBankItemIds((prev) => [...prev, ...newEntries.map((e) => e.id)]);
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -398,7 +498,29 @@ export function SetupPage() {
                   className="sr-only"
                 />
 
-                <ImageGrid bankItemIds={bankItemIds} items={items} onRemove={removeItem} />
+                <div className="mt-3">
+                  <p className="text-xs font-bold text-white/40 mb-1.5">Or add text items (comma-separated)</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') addTextItems(); }}
+                      placeholder="e.g. Dog, Cat, Fish"
+                      className="game-input flex-1 text-sm"
+                    />
+                    <GameButton
+                      variant="ghost"
+                      size="sm"
+                      disabled={textInput.trim().length === 0 || itemCount >= 100}
+                      onClick={addTextItems}
+                    >
+                      Add
+                    </GameButton>
+                  </div>
+                </div>
+
+                <ImageGrid bankItemIds={bankItemIds} items={items} onRemove={removeItem} onClearAll={clearAllItems} />
               </Panel>
             )}
 
