@@ -12,10 +12,5 @@
   },
   "compatibility_flags": [
     "nodejs_compat"
-  ],
-  // Production backend — set once, never changes (unlike the dev tunnel).
-  // Override per-environment in the Cloudflare dashboard if needed.
-  "vars": {
-    "BACKEND_URL": "https://your-app.onrender.com"
-  }
+  ]
 }
