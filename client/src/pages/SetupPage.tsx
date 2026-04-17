@@ -7,6 +7,7 @@ import { TierMakerBrowser } from '@/components/TierMakerBrowser';
 import { cn } from '@/lib/utils';
 import { ImageIcon, Hourglass, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
+import { SetupBackground } from '@/components/ui/SetupBackground';
 
 // ---------------------------------------------------------------------------
 // Local-only types (never sent to server until Start Game)
@@ -381,7 +382,8 @@ export function SetupPage() {
 
   return (
     <>
-      <div className="flex h-full flex-col bg-game-bg overflow-hidden">
+      <div className="relative flex h-full flex-col bg-game-bg overflow-hidden">
+        <SetupBackground />
         <div className="h-1 w-full bg-gradient-to-r from-game-pink via-game-purple to-game-cyan flex-none" />
 
         <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm">

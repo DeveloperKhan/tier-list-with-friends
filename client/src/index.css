@@ -29,6 +29,20 @@
   }
 }
 
+@keyframes sq-float {
+  0%   { transform: translateY(0)       rotate(0deg);   opacity: var(--sq-opacity); }
+  50%  {                                                 opacity: calc(var(--sq-opacity) * 0.5); }
+  100% { transform: translateY(-110vh)  rotate(720deg); opacity: 0; }
+}
+
+.setup-bg-square {
+  position: absolute;
+  bottom: -10%;
+  border-radius: 6px;
+  animation: sq-float linear infinite;
+  will-change: transform, opacity;
+}
+
 @layer components {
   /* Chunky 3D press button */
   .btn-game {
