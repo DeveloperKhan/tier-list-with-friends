@@ -1,12 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useGame } from '@/context/GameContext';
 import { useDiscord } from '@/context/DiscordContext';
-import { getItemSrc } from '@/lib/utils';
-
-function avatarUrl(userId: string, avatar: string | null): string {
-  if (avatar) return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=32`;
-  return `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(userId) % 6n)}.png`;
-}
+import { getItemSrc, discordAvatarUrl } from '@/lib/utils';
 
 /** Emits throttled CURSOR_MOVE events and renders other players' cursors. */
 export function PlayerCursors() {
@@ -101,7 +96,7 @@ export function PlayerCursors() {
             {/* Avatar + name badge */}
             <div className="flex items-center gap-1 rounded-full bg-black/70 pl-0.5 pr-2 py-0.5 backdrop-blur-sm border border-white/10">
               <img
-                src={avatarUrl(userId, participant.avatar)}
+                src={discordAvatarUrl(userId, participant.avatar)}
                 alt={participant.username}
                 className="h-4 w-4 rounded-full object-cover flex-none"
               />

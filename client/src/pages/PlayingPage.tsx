@@ -24,7 +24,7 @@ import { PlayerCursors } from '@/components/PlayerCursors';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
-import { cn, getItemSrc } from '@/lib/utils';
+import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
 import { ChevronDown, ChevronUp, Download, Layers, LogOut, Plus, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -73,27 +73,17 @@ function DraggableItem({
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
-  const blockerName =
-    isLockedByOther
-      ? (participants[item.lockedBy!]?.username ?? 'Someone')
-      : isOwnedByOther
-        ? (participants[item.ownedBy!]?.username ?? 'Someone')
-        : null;
-
-  const tooltip = isLockedByOther
-    ? `Being moved by ${blockerName}`
-    : isOwnedByOther
-      ? `Owned by ${blockerName}`
-      : undefined;
+  const blockerId = isLockedByOther ? item.lockedBy! : isOwnedByOther ? item.ownedBy! : null;
+  const blocker = blockerId ? participants[blockerId] : null;
+  const blockerLabel = isLockedByOther ? 'Moving…' : 'Owned by';
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      title={tooltip}
-{...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
+      {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
-        'relative aspect-square w-14 flex-shrink-0 overflow-hidden rounded-lg bg-white/10',
+        'group relative aspect-square w-14 flex-shrink-0 overflow-hidden rounded-lg bg-white/10',
         canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing touch-none',
         isLockedByOther && 'pointer-events-none opacity-50',
         isOwnedByOther && 'pointer-events-none opacity-75 ring-1 ring-white/20',
@@ -107,6 +97,25 @@ function DraggableItem({
         draggable={false}
         className="h-full w-full object-cover"
       />
+      {blocker && (
+        <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+          <div className="flex items-center gap-1.5 rounded-lg bg-black/90 px-2 py-1.5 shadow-xl border border-white/10 whitespace-nowrap">
+            <img
+              src={discordAvatarUrl(blockerId!, blocker.avatar)}
+              alt={blocker.username}
+              className="h-4 w-4 rounded-full object-cover flex-none"
+            />
+            <div className="flex flex-col leading-none gap-0.5">
+              <span className="text-white/50 text-[9px]">{blockerLabel}</span>
+              <span className="text-white text-[10px] font-semibold">{blocker.username}</span>
+            </div>
+          </div>
+          {/* Caret */}
+          <div className="mx-auto w-2 h-1 overflow-hidden flex justify-center">
+            <div className="w-2 h-2 bg-black/90 border-r border-b border-white/10 rotate-45 -translate-y-1" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

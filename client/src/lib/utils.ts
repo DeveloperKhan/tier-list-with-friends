@@ -50,6 +50,12 @@ export function textToDataUrl(text: string): string {
   return url;
 }
 
+/** Return the Discord avatar URL for a participant. */
+export function discordAvatarUrl(userId: string, avatar: string | null): string {
+  if (avatar) return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=32`;
+  return `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(userId) % 6n)}.png`;
+}
+
 /** Return the display src for any item, regardless of kind. */
 export function getItemSrc(item: { kind: string; dataUrl: string; imageUrl: string; text: string }): string {
   if (item.kind === 'tiermaker') {
