@@ -14,7 +14,7 @@ export function PlayerCursors() {
 
     function onMouseMove(e: MouseEvent) {
       const now = Date.now();
-      if (now - lastEmit.current < 33) return; // ~30 fps
+      if (now - lastEmit.current < 100) return; // ~10 fps
       lastEmit.current = now;
       socket!.emit('CURSOR_MOVE', {
         x: e.clientX / window.innerWidth,
@@ -24,7 +24,7 @@ export function PlayerCursors() {
 
     function onTouchMove(e: TouchEvent) {
       const now = Date.now();
-      if (now - lastEmit.current < 33) return;
+      if (now - lastEmit.current < 100) return;
       lastEmit.current = now;
       const t = e.touches[0];
       if (!t) return;

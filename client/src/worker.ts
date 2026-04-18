@@ -164,8 +164,25 @@ export default {
       }
     }
 
-    // Proxy /api/tiermaker/* and /ws/* to the backend.
-    if (url.pathname.startsWith('/api/tiermaker/') || url.pathname.startsWith('/ws/')) {
+    // WebSocket proxy for /ws/* — return upstream directly so Cloudflare can
+    // forward the 101 Switching Protocols handshake. Wrapping in new Response()
+    // breaks the upgrade and forces Socket.IO to stay on HTTP long-polling.
+    if (url.pathname.startsWith('/ws/')) {
+      const target = (env.BACKEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+      try {
+        return await fetch(`${target}${url.pathname}${url.search}`, {
+          method: request.method,
+          headers: request.headers,
+          body: request.body ?? undefined,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: `Proxy error: ${message}` }, { status: 502 });
+      }
+    }
+
+    // Proxy /api/tiermaker/* to the backend.
+    if (url.pathname.startsWith('/api/tiermaker/')) {
       const target = (env.BACKEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
       try {

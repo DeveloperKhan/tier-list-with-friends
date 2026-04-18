@@ -142,11 +142,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const sock = io(socketUrl!, {
       path: '/ws',
-      // Start with polling so a Socket.IO session is established before upgrading.
-      // WebSocket-first fails under heavy image-proxy load: the upgrade request
-      // races with many concurrent HTTP requests and can fail, causing a
-      // disconnect → reconnect loop. Once polling is stable it auto-upgrades.
-      transports: ['polling', 'websocket'],
+      // Prefer WebSocket first; fall back to polling only if the upgrade fails.
+      // The Worker now returns the upstream fetch directly for /ws/* so the
+      // 101 handshake is preserved and the upgrade succeeds in production.
+      transports: ['websocket', 'polling'],
     });
 
     // Emitted on initial connect AND every auto-reconnect. The server
