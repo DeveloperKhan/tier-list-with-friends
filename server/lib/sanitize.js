@@ -4,7 +4,7 @@ import { MAX_IMAGE_BYTES } from "./constants.js";
 export function sanitizeTier(raw) {
   return {
     id: String(raw.id ?? randomUUID()).slice(0, 36),
-    label: String(raw.label ?? "").slice(0, 10),
+    label: String(raw.label ?? "").slice(0, 50),
     color: /^#[0-9a-fA-F]{6}$/.test(raw.color) ? raw.color : "#888888",
     itemIds: [],
   };

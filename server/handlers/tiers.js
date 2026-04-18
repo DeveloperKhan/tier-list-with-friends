@@ -28,7 +28,7 @@ export function registerTierHandlers(io, socket) {
       }
     } else if (action === "rename") {
       const tier = room.tiers.find((t) => t.id === tierId);
-      if (tier && typeof label === "string") tier.label = label.slice(0, 10);
+      if (tier && typeof label === "string") tier.label = label.slice(0, 50);
     } else if (action === "recolor") {
       const tier = room.tiers.find((t) => t.id === tierId);
       if (tier && /^#[0-9a-fA-F]{6}$/.test(color)) tier.color = color;

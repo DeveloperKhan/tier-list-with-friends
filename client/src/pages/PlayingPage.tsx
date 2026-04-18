@@ -26,6 +26,7 @@ import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
+import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS } from '@/lib/constants';
 import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -235,6 +236,7 @@ function AddTextPopup({ onAdd, onClose }: { onAdd: (text: string) => void; onClo
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
+            maxLength={MAX_TEXT_ITEM_LENGTH}
             placeholder="e.g. Apple, Banana"
             className="game-input flex-1 py-1 text-xs"
           />
@@ -377,8 +379,14 @@ function EditTiersModal({
   const [localTiers, setLocalTiers] = useState<LocalTier[]>(
     () => tiers.map(({ id, label, color }) => ({ id, label, color })),
   );
+  const [modalError, setModalError] = useState<string | null>(null);
 
   function handleAdd() {
+    if (localTiers.length >= MAX_TIERS) {
+      setModalError(`Tier limit reached (max ${MAX_TIERS}).`);
+      return;
+    }
+    setModalError(null);
     setLocalTiers((prev) => [
       ...prev,
       { id: crypto.randomUUID(), label: 'New', color: TIER_PALETTE[prev.length % TIER_PALETTE.length] },
@@ -443,9 +451,9 @@ function EditTiersModal({
               <input
                 type="text"
                 value={tier.label}
-                maxLength={50}
-                className="game-input min-w-0 flex-1 py-1 text-sm"
-                onChange={(e) => handleRename(tier.id, e.target.value)}
+                maxLength={MAX_TIER_LABEL_LENGTH}
+                className={cn('game-input min-w-0 flex-1 py-1 text-sm', !tier.label.trim() && 'ring-1 ring-red-500')}
+                onChange={(e) => { handleRename(tier.id, e.target.value); setModalError(null); }}
               />
 
               {/* Reorder */}
@@ -487,11 +495,26 @@ function EditTiersModal({
           <Plus size={14} /> Add Tier
         </GameButton>
 
+        {modalError && (
+          <p className="rounded-lg border border-red-500/40 bg-red-900/30 px-3 py-1.5 text-xs font-semibold text-red-300">
+            {modalError}
+          </p>
+        )}
+
         <div className="flex gap-2 pt-1 border-t border-white/10">
           <GameButton variant="ghost" size="sm" onClick={onClose} className="flex-1 justify-center">
             Cancel
           </GameButton>
-          <GameButton variant="success" size="sm" onClick={() => onSave(localTiers)} className="flex-1 justify-center">
+          <GameButton
+            variant="success"
+            size="sm"
+            className="flex-1 justify-center"
+            onClick={() => {
+              const empty = localTiers.find((t) => !t.label.trim());
+              if (empty) { setModalError('All tiers must have a name.'); return; }
+              onSave(localTiers);
+            }}
+          >
             Save Changes
           </GameButton>
         </div>
@@ -659,6 +682,20 @@ export function PlayingPage() {
     setToast(`${name} is already moving that item.`);
     clearLockRejected();
   }, [lockRejected, roomState, clearLockRejected]);
+
+  // Surface server-side rejections as toasts
+  useEffect(() => {
+    if (!socket) return;
+    const onUploadRejected = ({ reason }: { reason: string }) => setToast(reason);
+    const onTemplatePartial = ({ loaded, total }: { loaded: number; total: number }) =>
+      setToast(`Only ${loaded} of ${total} images loaded — room item limit reached.`);
+    socket.on('UPLOAD_REJECTED', onUploadRejected);
+    socket.on('LOAD_TEMPLATE_PARTIAL', onTemplatePartial);
+    return () => {
+      socket.off('UPLOAD_REJECTED', onUploadRejected);
+      socket.off('LOAD_TEMPLATE_PARTIAL', onTemplatePartial);
+    };
+  }, [socket]);
 
   // Receive remote draw events and render onto the shared canvas
   useEffect(() => {
@@ -964,7 +1001,7 @@ export function PlayingPage() {
                 >
                   {/* Tier label */}
                   <div
-                    className="flex w-14 flex-shrink-0 items-center justify-center p-1 font-black"
+                    className="flex w-[4.5rem] flex-shrink-0 items-center justify-center p-1.5 font-black"
                     style={{
                       backgroundColor: tier.color + '22',
                       borderRight: `4px solid ${tier.color}`,
@@ -973,11 +1010,15 @@ export function PlayingPage() {
                     <span
                       style={{
                         color: tier.color,
-                        fontSize: tier.label.length <= 2 ? '1.1rem' : tier.label.length <= 4 ? '0.8rem' : '0.6rem',
+                        fontSize:
+                          tier.label.length <= 2 ? '1.1rem' :
+                          tier.label.length <= 4 ? '0.85rem' :
+                          tier.label.length <= 8 ? '0.65rem' :
+                          tier.label.length <= 16 ? '0.5rem' : '0.4rem',
                         wordBreak: 'break-all',
                         overflowWrap: 'anywhere',
                         textAlign: 'center',
-                        lineHeight: 1.15,
+                        lineHeight: 1.2,
                         display: 'block',
                         width: '100%',
                       }}

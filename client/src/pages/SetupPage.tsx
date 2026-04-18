@@ -5,6 +5,7 @@ import { Panel, SectionLabel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { TierMakerBrowser, type TierMakerTemplateItem } from '@/components/TierMakerBrowser';
 import { cn, getItemSrc } from '@/lib/utils';
+import { MAX_IMAGE_BYTES, MAX_ITEMS, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH } from '@/lib/constants';
 import { ImageIcon, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 import { SetupBackground } from '@/components/ui/SetupBackground';
@@ -82,7 +83,7 @@ function TierRow({ tier, index, total, onChange, onDelete, onMove }: TierRowProp
         type="text"
         value={tier.label}
         onChange={(e) => onChange(tier.id, { label: e.target.value })}
-        maxLength={50}
+        maxLength={MAX_TIER_LABEL_LENGTH}
         size={Math.max(2, tier.label.length)}
         className="min-w-0 bg-transparent text-center font-black text-lg focus:outline-none focus:bg-white/5 rounded-lg px-1"
         style={{ color: tier.color }}
@@ -198,6 +199,7 @@ export function SetupPage() {
   const [showTierMaker, setShowTierMaker] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [isStarting, setIsStarting] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   // When the socket reconnects while we're waiting for START_GAME to be
   // confirmed, automatically re-emit it so the user doesn't have to click again.
@@ -253,36 +255,38 @@ export function SetupPage() {
   }
 
   function addTier() {
-    setTiers((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        label: 'New',
-        color: TIER_PALETTE[prev.length % TIER_PALETTE.length],
-        itemIds: [],
-      },
-    ]);
+    setTiers((prev) => {
+      if (prev.length >= MAX_TIERS) {
+        setSetupError(`Tier limit reached (max ${MAX_TIERS}).`);
+        return prev;
+      }
+      return [...prev, { id: crypto.randomUUID(), label: 'New', color: TIER_PALETTE[prev.length % TIER_PALETTE.length], itemIds: [] }];
+    });
   }
 
   // ── Image mutations ───────────────────────────────────────────────────────
 
   async function uploadFiles(files: FileList | File[]) {
     setUploading(true);
+    setSetupError(null);
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
       await new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const dataUrl = e.target?.result as string;
-          if (dataUrl.length > 200_000) {
-            alert(`"${file.name}" is too large (max ~150 KB).`);
+          if (dataUrl.length > MAX_IMAGE_BYTES) {
+            setSetupError(`"${file.name}" is too large (max ~150 KB).`);
           } else {
             const id = crypto.randomUUID();
             setItems((prev) => {
-              if (Object.keys(prev).length >= 100) return prev;
+              if (Object.keys(prev).length >= MAX_ITEMS) {
+                setSetupError(`Item limit reached (max ${MAX_ITEMS}).`);
+                return prev;
+              }
               return { ...prev, [id]: { id, kind: 'upload' as const, dataUrl, imageUrl: '', text: '', fileName: file.name } };
             });
-            setBankItemIds((prev) => (prev.length < 100 ? [...prev, id] : prev));
+            setBankItemIds((prev) => (prev.length < MAX_ITEMS ? [...prev, id] : prev));
           }
           resolve();
         };
@@ -354,6 +358,11 @@ export function SetupPage() {
   // ── Submit ────────────────────────────────────────────────────────────────
 
   function handleStartGame() {
+    setSetupError(null);
+    const emptyTier = tiers.find((t) => !t.label.trim());
+    if (emptyTier) { setSetupError('All tiers must have a name.'); return; }
+    if (tiers.length > MAX_TIERS) { setSetupError(`Too many tiers (max ${MAX_TIERS}).`); return; }
+    if (bankItemIds.length === 0) { setSetupError('Add at least one item before starting.'); return; }
     setIsStarting(true);
     socket?.emit('START_GAME', {
       instanceId: roomState?.instanceId,
@@ -403,7 +412,7 @@ export function SetupPage() {
                   placeholder="e.g. Best Pokémon of Gen 1…"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  maxLength={100}
+                  maxLength={MAX_TITLE_LENGTH}
                   className="game-input w-full text-xl font-black"
                 />
               </Panel>
@@ -502,6 +511,7 @@ export function SetupPage() {
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') addTextItems(); }}
+                      maxLength={MAX_TEXT_ITEM_LENGTH}
                       placeholder="e.g. Dog, Cat, Fish"
                       className="game-input flex-1 text-sm"
                     />
@@ -522,11 +532,17 @@ export function SetupPage() {
 
             {/* ── Start Game / waiting ─────────────────────────────────── */}
             {isHost ? (
+              <>
+              {setupError && (
+                <p className="rounded-xl border border-red-500/40 bg-red-900/30 px-4 py-2.5 text-sm font-semibold text-red-300">
+                  {setupError}
+                </p>
+              )}
               <GameButton
                 variant="success"
                 size="lg"
                 className="w-full"
-                disabled={itemCount === 0 || isStarting}
+                disabled={isStarting}
                 onClick={handleStartGame}
               >
                 {isStarting ? (
@@ -536,7 +552,7 @@ export function SetupPage() {
                   </span>
                 ) : 'Start Game!'}
               </GameButton>
-            ) : (
+              </>) : (
               <Panel className="p-4 text-center">
                 <p className="text-sm font-bold text-white/50">
                   Waiting for the host to start the game…
