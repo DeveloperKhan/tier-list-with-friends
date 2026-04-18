@@ -22,13 +22,31 @@ export const isInsideDiscord = new URLSearchParams(window.location.search).has('
  * Mock IDs are persisted in sessionStorage so they stay stable across HMR
  * reloads but reset each browser session (simulating a fresh join).
  */
+/**
+ * When ?dev_player=N is in the URL, return a stable identity for that player
+ * slot so multiple tabs can simulate different users in the same room.
+ * N can be any string, e.g. "1", "2", "alice".
+ */
+function getDevPlayerOverride(): { userId: string; username: string } | null {
+  const slot = new URLSearchParams(window.location.search).get('dev_player');
+  if (!slot) return null;
+  // Use a numeric hash so the userId looks plausible but is deterministic.
+  const hash = [...slot].reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 0x1234);
+  return {
+    userId: String(hash).padStart(18, '0'),
+    username: `Dev Player ${slot}`,
+  };
+}
+
 function buildSdk(): IDiscordSDK {
   if (isInsideDiscord) {
     return new DiscordSDK(clientId);
   }
 
+  // Use localStorage so all tabs share the same room IDs.
+  // Individual tab identity is controlled via ?dev_player= instead.
   const STORAGE_KEY = 'dev_mock_ids';
-  const stored = sessionStorage.getItem(STORAGE_KEY);
+  const stored = localStorage.getItem(STORAGE_KEY);
   const ids: { guildId: string; channelId: string; locationId: string } = stored
     ? JSON.parse(stored)
     : {
@@ -37,7 +55,7 @@ function buildSdk(): IDiscordSDK {
         locationId: String(Math.floor(Math.random() * 1e15)),
       };
 
-  if (!stored) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+  if (!stored) localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
 
   return new DiscordSDKMock(clientId, ids.guildId, ids.channelId, ids.locationId);
 }
@@ -95,15 +113,16 @@ export function DiscordProvider({ children }: { children: React.ReactNode }) {
             access_token: 'mock-token',
           });
 
+          const override = getDevPlayerOverride();
           setAuth({
             status: 'ready',
             discordSdk,
             accessToken: 'mock-token',
             user: {
-              id: auth.user.id,
-              username: auth.user.username,
+              id: override?.userId ?? auth.user.id,
+              username: override?.username ?? auth.user.username,
               avatar: auth.user.avatar ?? null,
-              global_name: auth.user.global_name ?? 'Dev User',
+              global_name: override?.username ?? auth.user.global_name ?? 'Dev User',
             },
           });
           return;
