@@ -83,10 +83,20 @@ function DraggableItem({
   const blocker = blockerId ? participants[blockerId] : null;
   const blockerLabel = isLockedByOther ? 'Moving…' : 'Placed by';
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [tooltipBelow, setTooltipBelow] = useState(false);
+
+  function checkTooltipDirection() {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setTooltipBelow(rect.top < 90);
+  }
+
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => { setNodeRef(node); (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node; }}
       style={style}
+      onMouseEnter={checkTooltipDirection}
       {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
         'group relative aspect-square w-14 flex-shrink-0 rounded-lg bg-white/10',
@@ -108,7 +118,8 @@ function DraggableItem({
       </div>
       {blocker && (
         <div className={cn(
-          'absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 w-max opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50',
+          'absolute left-1/2 -translate-x-1/2 w-max opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50',
+          tooltipBelow ? 'top-full mt-1.5 flex-col-reverse' : 'bottom-full mb-1.5',
           canDuel ? 'pointer-events-auto hover:opacity-100' : 'pointer-events-none',
         )}>
           <div className="flex items-center gap-1.5 rounded-lg bg-black/90 px-2 py-1.5 shadow-xl border border-white/10 whitespace-nowrap">
@@ -131,8 +142,8 @@ function DraggableItem({
             )}
           </div>
           {/* Caret */}
-          <div className="mx-auto w-2 h-1 overflow-hidden flex justify-center">
-            <div className="w-2 h-2 bg-black/90 border-r border-b border-white/10 rotate-45 -translate-y-1" />
+          <div className={cn('mx-auto w-2 h-1 overflow-hidden flex justify-center', tooltipBelow ? 'order-first' : '')}>
+            <div className={cn('w-2 h-2 bg-black/90 border-white/10', tooltipBelow ? 'border-l border-t rotate-45 translate-y-1' : 'border-r border-b rotate-45 -translate-y-1')} />
           </div>
         </div>
       )}
