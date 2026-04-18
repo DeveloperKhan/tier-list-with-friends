@@ -58,7 +58,7 @@ export function getItemSrc(item: { kind: string; dataUrl: string; imageUrl: stri
     const url = item.imageUrl.startsWith('/')
       ? `https://tiermaker.com${item.imageUrl}`
       : item.imageUrl;
-    return `/api/tiermaker/image?url=${encodeURIComponent(url)}`;
+    return url;
   }
   if (item.kind === 'text') return textToDataUrl(item.text);
   return item.dataUrl;
