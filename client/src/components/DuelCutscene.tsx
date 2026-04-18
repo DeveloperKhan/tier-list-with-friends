@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { discordAvatarUrl } from '@/lib/utils';
 import type { DuelResult, Participant } from '@/context/GameContext';
+import { Z } from '@/lib/constants';
 
 const MOVES = ['rock', 'paper', 'scissors'] as const;
 const MOVE_EMOJI: Record<string, string> = { rock: '🪨', paper: '📄', scissors: '✂️' };
@@ -100,7 +101,7 @@ export function DuelCutscene({ result, participants, currentUserId, onDone }: Pr
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+    <div style={{ zIndex: Z.duelCutscene }} className="fixed inset-0 flex items-center justify-center pointer-events-none">
       <div className="pointer-events-auto animate-bounce-in bg-game-bg border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl w-72 text-center backdrop-blur-sm">
         {/* Header */}
         <p className="text-white font-black text-sm mb-4 tracking-wide">⚔️ DUEL</p>

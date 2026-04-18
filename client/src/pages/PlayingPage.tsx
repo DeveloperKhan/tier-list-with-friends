@@ -27,7 +27,7 @@ import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
 import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
-import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS } from '@/lib/constants';
+import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, Z } from '@/lib/constants';
 import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
   }, [onDismiss]);
 
   return (
-    <div className="fixed bottom-36 left-1/2 z-50 -translate-x-1/2 animate-bounce-in rounded-xl border-2 border-red-500/50 bg-red-900/80 px-4 py-2 text-sm font-bold text-white shadow-2xl backdrop-blur-sm">
+    <div style={{ zIndex: Z.modal }} className="fixed bottom-36 left-1/2 -translate-x-1/2 animate-bounce-in rounded-xl border-2 border-red-500/50 bg-red-900/80 px-4 py-2 text-sm font-bold text-white shadow-2xl backdrop-blur-sm">
       {message}
     </div>
   );
@@ -235,7 +235,7 @@ function AddTextPopup({ onAdd, onClose }: { onAdd: (text: string) => void; onClo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center pb-32 bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-end justify-center pb-32 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div
         className="w-72 rounded-xl border border-white/10 bg-game-panel p-3 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -429,7 +429,7 @@ function EditTiersModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <Panel className="flex w-full max-w-sm flex-col gap-3 p-5">
         <div className="flex items-center justify-between">
           <span className="font-black text-white">Edit Tiers</span>
@@ -547,7 +547,7 @@ function EndSessionConfirm({
   onCancel: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <Panel className="w-full max-w-xs p-6 text-center space-y-4">
         <p className="font-black text-white text-lg">End session?</p>
         <p className="text-sm text-white/60">This will end the game for all players.</p>
@@ -1055,8 +1055,9 @@ export function PlayingPage() {
             {/* Confetti animation canvas — sits above drawing canvas, never receives pointer events */}
             <canvas
               ref={confettiCanvasRef}
+              style={{ zIndex: Z.canvasConfetti }}
               className={cn(
-                'absolute inset-0 z-[11] pointer-events-none transition-opacity duration-150',
+                'absolute inset-0 pointer-events-none transition-opacity duration-150',
                 drawingsHidden && 'opacity-0',
               )}
             />
@@ -1064,8 +1065,9 @@ export function PlayingPage() {
             {/* Canvas drawing overlay — pointer-events controlled by active tool */}
             <canvas
               ref={canvasRef}
+              style={{ zIndex: Z.canvasBase }}
               className={cn(
-                'absolute inset-0 z-10 transition-opacity duration-150',
+                'absolute inset-0 transition-opacity duration-150',
                 drawTool === 'pen' || drawTool === 'confetti' ? 'pointer-events-auto' : 'pointer-events-none',
                 drawTool === 'pen' && 'cursor-crosshair',
                 drawTool === 'confetti' && 'cursor-pointer',
@@ -1079,7 +1081,7 @@ export function PlayingPage() {
 
             {/* Drawing toolbar — right edge of tier list */}
             {showDrawBar && (
-              <div className="absolute right-2 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-white/10 bg-black/70 p-1.5 shadow-2xl backdrop-blur-sm">
+              <div style={{ zIndex: Z.drawToolbar }} className="absolute right-2 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-white/10 bg-black/70 p-1.5 shadow-2xl backdrop-blur-sm">
                 {/* Player color swatch */}
                 <div
                   className="h-4 w-4 flex-shrink-0 rounded-full border-2 border-white/30"

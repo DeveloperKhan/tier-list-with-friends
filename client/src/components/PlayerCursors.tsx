@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useGame } from '@/context/GameContext';
 import { useDiscord } from '@/context/DiscordContext';
 import { getItemSrc, discordAvatarUrl } from '@/lib/utils';
+import { Z } from '@/lib/constants';
 
 /** Emits throttled CURSOR_MOVE events and renders other players' cursors. */
 export function PlayerCursors() {
@@ -54,7 +55,7 @@ export function PlayerCursors() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+    <div style={{ zIndex: Z.cursors }} className="pointer-events-none fixed inset-0 overflow-hidden">
       {Object.entries(cursors).map(([userId, { x, y }]) => {
         if (userId === currentUserId) return null;
         const participant = participants[userId];

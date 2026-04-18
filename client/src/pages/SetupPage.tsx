@@ -6,7 +6,7 @@ import { PlayerList } from '@/components/ui/PlayerList';
 import { TierMakerBrowser, type TierMakerTemplateItem } from '@/components/TierMakerBrowser';
 import { cn, getItemSrc } from '@/lib/utils';
 import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
-import { MAX_ITEMS, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH } from '@/lib/constants';
+import { MAX_ITEMS, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH, Z } from '@/lib/constants';
 import { ImageIcon, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 import { SetupBackground } from '@/components/ui/SetupBackground';
@@ -167,7 +167,7 @@ function TierMakerModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div
         className="relative w-full max-w-2xl rounded-2xl border-2 border-game-border bg-game-bg shadow-2xl overflow-hidden"
         style={{ height: 'min(600px, 90vh)' }}
