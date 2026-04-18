@@ -891,10 +891,128 @@ export function PlayingPage() {
   // ── Host actions ───────────────────────────────────────────────────────
 
   async function handleExport() {
-    if (!tierListRef.current) return;
+    const tiers = roomState!.tiers;
+    const items = roomState!.items;
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(tierListRef.current, { useCORS: true });
+      const SCALE = 2;
+      const LABEL_W = 80;
+      const ITEM_SIZE = 56;
+      const ITEM_GAP = 4;
+      const PAD = 6;
+      const CANVAS_W = 900;
+      const CONTENT_W = CANVAS_W - LABEL_W;
+      const ITEMS_PER_ROW = Math.floor((CONTENT_W - PAD * 2 + ITEM_GAP) / (ITEM_SIZE + ITEM_GAP));
+      const MIN_TIER_H = ITEM_SIZE + PAD * 2;
+
+      // Pre-load all images in parallel
+      const imgMap: Record<string, HTMLImageElement> = {};
+      await Promise.all(
+        tiers.flatMap((t) => t.itemIds).map((id) => {
+          const item = items[id];
+          if (!item) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => { imgMap[id] = img; resolve(); };
+            img.onerror = () => resolve();
+            img.src = getItemSrc(item);
+          });
+        }),
+      );
+
+      // Calculate exact height per tier based on content
+      const tierHeights = tiers.map((tier) => {
+        if (tier.itemIds.length === 0) return MIN_TIER_H;
+        const rows = Math.ceil(tier.itemIds.length / ITEMS_PER_ROW);
+        return Math.max(MIN_TIER_H, rows * (ITEM_SIZE + ITEM_GAP) - ITEM_GAP + PAD * 2);
+      });
+      const totalH = tierHeights.reduce((a, b) => a + b, 0);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = CANVAS_W * SCALE;
+      canvas.height = totalH * SCALE;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(SCALE, SCALE);
+
+      // Background
+      ctx.fillStyle = '#0f0f1a';
+      ctx.fillRect(0, 0, CANVAS_W, totalH);
+
+      let y = 0;
+      for (let i = 0; i < tiers.length; i++) {
+        const tier = tiers[i];
+        const h = tierHeights[i];
+        const borderW = 4;
+        const labelAreaW = LABEL_W - borderW;
+
+        // Label background
+        ctx.fillStyle = tier.color + '22';
+        ctx.fillRect(0, y, LABEL_W, h);
+
+        // Right border
+        ctx.fillStyle = tier.color;
+        ctx.fillRect(labelAreaW, y, borderW, h);
+
+        // Row separator
+        if (i < tiers.length - 1) {
+          ctx.fillStyle = 'rgba(255,255,255,0.05)';
+          ctx.fillRect(0, y + h - 1, CANVAS_W, 1);
+        }
+
+        // Label text — font-size scales with label length, word-wrapped
+        const labelPad = 6;
+        const availW = labelAreaW - labelPad * 2;
+        const rawLabel = tier.label;
+        let fontSize = rawLabel.length <= 2 ? 20 : rawLabel.length <= 4 ? 16 : rawLabel.length <= 8 ? 12 : rawLabel.length <= 16 ? 9 : 7;
+        ctx.font = `900 ${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = tier.color;
+
+        // Build word-wrapped lines
+        const words = rawLabel.split(/\s+/);
+        const lines: string[] = [];
+        let cur = '';
+        for (const word of words) {
+          const test = cur ? `${cur} ${word}` : word;
+          if (cur && ctx.measureText(test).width > availW) { lines.push(cur); cur = word; }
+          else cur = test;
+        }
+        if (cur) lines.push(cur);
+
+        const lineH = fontSize * 1.25;
+        const blockH = lines.length * lineH;
+        const textY0 = y + h / 2 - blockH / 2 + lineH / 2;
+        for (let l = 0; l < lines.length; l++) {
+          ctx.fillText(lines[l], labelAreaW / 2, textY0 + l * lineH, availW);
+        }
+
+        // Draw items
+        let ix = LABEL_W + PAD;
+        let iy = y + PAD;
+        for (const id of tier.itemIds) {
+          const img = imgMap[id];
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(ix, iy, ITEM_SIZE, ITEM_SIZE, 8);
+          ctx.clip();
+          if (img) {
+            ctx.drawImage(img, ix, iy, ITEM_SIZE, ITEM_SIZE);
+          } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.fillRect(ix, iy, ITEM_SIZE, ITEM_SIZE);
+          }
+          ctx.restore();
+
+          ix += ITEM_SIZE + ITEM_GAP;
+          if (ix + ITEM_SIZE > CANVAS_W - PAD) {
+            ix = LABEL_W + PAD;
+            iy += ITEM_SIZE + ITEM_GAP;
+          }
+        }
+
+        y += h;
+      }
+
       const a = document.createElement('a');
       a.href = canvas.toDataURL('image/png');
       a.download = `${roomState!.title || 'tier-list'}.png`;
