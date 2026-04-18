@@ -268,12 +268,32 @@ function BankDropZone({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'bank' });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [showTextPopup, setShowTextPopup] = useState(false);
+
+  // Redirect vertical scroll to horizontal so mouse-wheel users can scroll the bank
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Combine dnd-kit ref with our scroll ref
+  function bankRef(node: HTMLDivElement | null) {
+    setNodeRef(node);
+    (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+  }
 
   return (
     <>
       <div
-        ref={setNodeRef}
+        ref={bankRef}
         className={cn(
           'flex flex-shrink-0 items-center gap-1.5 overflow-x-auto border-t-2 border-white/10 bg-game-panel/60 px-2 transition-colors',
           'game-scroll',
