@@ -27,4 +27,12 @@ export function registerDrawHandlers(io, socket) {
     if (!info) return;
     socket.to(info.instanceId).emit("DRAW_CLEAR");
   });
+
+  socket.on("CONFETTI_BURST", async ({ x, y }) => {
+    const info = await getSocketInfo(socket.id);
+    if (!info) return;
+    socket.to(info.instanceId).emit("CONFETTI_BURST", {
+      x: Number(x), y: Number(y),
+    });
+  });
 }

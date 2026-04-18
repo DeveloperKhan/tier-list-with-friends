@@ -26,7 +26,7 @@ import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -497,6 +497,77 @@ function EndSessionConfirm({
 }
 
 // ---------------------------------------------------------------------------
+// Confetti
+// ---------------------------------------------------------------------------
+
+const CONFETTI_COLORS = ['#FF4444', '#FF8C00', '#FFD700', '#32CD32', '#1E90FF', '#9932CC', '#FF69B4', '#00CED1', '#FF6B35', '#4ECDC4', '#ffffff'];
+
+type ConfettiParticle = {
+  x: number; y: number; vx: number; vy: number;
+  color: string; opacity: number; size: number;
+  rotation: number; rotationSpeed: number;
+};
+
+function _runConfettiFrame(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  particlesRef: React.MutableRefObject<ConfettiParticle[]>,
+  animatingRef: React.MutableRefObject<boolean>,
+) {
+  const canvas = canvasRef.current;
+  if (!canvas) { animatingRef.current = false; return; }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) { animatingRef.current = false; return; }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particlesRef.current = particlesRef.current.filter((p) => p.opacity > 0.01);
+  for (const p of particlesRef.current) {
+    p.vy += 0.13; p.vx *= 0.99;
+    p.x += p.vx; p.y += p.vy;
+    p.opacity -= 0.011; p.rotation += p.rotationSpeed;
+    ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+    ctx.globalAlpha = Math.max(0, p.opacity);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size * 0.3, p.size, p.size * 0.55);
+    ctx.restore();
+  }
+  if (particlesRef.current.length > 0) {
+    requestAnimationFrame(() => _runConfettiFrame(canvasRef, particlesRef, animatingRef));
+  } else {
+    animatingRef.current = false;
+  }
+}
+
+function spawnConfettiBurst(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  particlesRef: React.MutableRefObject<ConfettiParticle[]>,
+  animatingRef: React.MutableRefObject<boolean>,
+  nx: number, ny: number,
+) {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+  const cx = nx * canvas.width;
+  const cy = ny * canvas.height;
+  for (let i = 0; i < 40; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2.5 + Math.random() * 5.5;
+    particlesRef.current.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 3.5,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      opacity: 1,
+      size: 5 + Math.random() * 6,
+      rotation: Math.random() * Math.PI * 2,
+      rotationSpeed: (Math.random() - 0.5) * 0.18,
+    });
+  }
+  if (!animatingRef.current) {
+    animatingRef.current = true;
+    requestAnimationFrame(() => _runConfettiFrame(canvasRef, particlesRef, animatingRef));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // PlayingPage
 // ---------------------------------------------------------------------------
 
@@ -506,12 +577,15 @@ export function PlayingPage() {
   const [showEditTiers, setShowEditTiers] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [drawTool, setDrawTool] = useState<'grab' | 'pen'>('grab');
+  const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   const [showDrawBar, setShowDrawBar] = useState(true);
   const [drawingsHidden, setDrawingsHidden] = useState(false);
   const tierListRef = useRef<HTMLDivElement>(null);
   const drawContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
+  const confettiParticlesRef = useRef<ConfettiParticle[]>([]);
+  const confettiAnimatingRef = useRef(false);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -526,14 +600,16 @@ export function PlayingPage() {
     return palette[Math.abs(hash) % palette.length];
   }, [currentUserId]);
 
-  // Size canvas to match its container; clears on resize (acceptable trade-off)
+  // Size both canvases to match their container; clears on resize (acceptable trade-off)
   useEffect(() => {
     const container = drawContainerRef.current;
     const canvas = canvasRef.current;
+    const confetti = confettiCanvasRef.current;
     if (!container || !canvas) return;
     const sync = () => {
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
+      if (confetti) { confetti.width = container.clientWidth; confetti.height = container.clientHeight; }
     };
     sync();
     const ro = new ResizeObserver(sync);
@@ -585,13 +661,19 @@ export function PlayingPage() {
       c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
     }
 
+    function onConfetti({ x, y }: { x: number; y: number }) {
+      spawnConfettiBurst(confettiCanvasRef, confettiParticlesRef, confettiAnimatingRef, x, y);
+    }
+
     socket.on('DRAW_STROKE', onStroke);
     socket.on('DRAW_DOT', onDot);
     socket.on('DRAW_CLEAR', onClear);
+    socket.on('CONFETTI_BURST', onConfetti);
     return () => {
       socket.off('DRAW_STROKE', onStroke);
       socket.off('DRAW_DOT', onDot);
       socket.off('DRAW_CLEAR', onClear);
+      socket.off('CONFETTI_BURST', onConfetti);
     };
   }, [socket]);
 
@@ -607,6 +689,16 @@ export function PlayingPage() {
   }
 
   function handleCanvasPointerDown(e: React.PointerEvent) {
+    if (drawTool === 'confetti') {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / canvas.width;
+      const ny = (e.clientY - rect.top) / canvas.height;
+      spawnConfettiBurst(confettiCanvasRef, confettiParticlesRef, confettiAnimatingRef, nx, ny);
+      socket!.emit('CONFETTI_BURST', { x: nx, y: ny });
+      return;
+    }
     if (drawTool !== 'pen') return;
     const pt = getCanvasPoint(e);
     if (!pt) return;
@@ -874,12 +966,23 @@ export function PlayingPage() {
               )}
             </main>
 
+            {/* Confetti animation canvas — sits above drawing canvas, never receives pointer events */}
+            <canvas
+              ref={confettiCanvasRef}
+              className={cn(
+                'absolute inset-0 z-[11] pointer-events-none transition-opacity duration-150',
+                drawingsHidden && 'opacity-0',
+              )}
+            />
+
             {/* Canvas drawing overlay — pointer-events controlled by active tool */}
             <canvas
               ref={canvasRef}
               className={cn(
                 'absolute inset-0 z-10 transition-opacity duration-150',
-                drawTool === 'pen' ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none',
+                drawTool === 'pen' || drawTool === 'confetti' ? 'pointer-events-auto' : 'pointer-events-none',
+                drawTool === 'pen' && 'cursor-crosshair',
+                drawTool === 'confetti' && 'cursor-pointer',
                 drawingsHidden && 'opacity-0',
               )}
               onPointerDown={handleCanvasPointerDown}
@@ -919,6 +1022,17 @@ export function PlayingPage() {
                   )}
                 >
                   <Pencil size={15} />
+                </button>
+                {/* Confetti */}
+                <button
+                  onClick={() => setDrawTool('confetti')}
+                  title="Confetti — click to celebrate!"
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    drawTool === 'confetti' ? 'bg-purple-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  <PartyPopper size={15} />
                 </button>
                 <div className="h-px w-full bg-white/10" />
                 {/* Clear */}
