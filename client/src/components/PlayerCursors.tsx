@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useGame } from '@/context/GameContext';
 import { useDiscord } from '@/context/DiscordContext';
+import { getItemSrc } from '@/lib/utils';
 
 function avatarUrl(userId: string, avatar: string | null): string {
   if (avatar) return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png?size=32`;
@@ -49,6 +50,13 @@ export function PlayerCursors() {
   if (!roomState || discord.status !== 'ready') return null;
 
   const participants = roomState.participants;
+  // Build a map of userId → the item they are currently dragging
+  const dragging: Record<string, (typeof roomState.items)[string]> = {};
+  for (const item of Object.values(roomState.items)) {
+    if (item.lockedBy && item.lockedBy !== currentUserId) {
+      dragging[item.lockedBy] = item;
+    }
+  }
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
@@ -56,6 +64,7 @@ export function PlayerCursors() {
         if (userId === currentUserId) return null;
         const participant = participants[userId];
         if (!participant) return null;
+        const draggedItem = dragging[userId];
 
         return (
           <div
@@ -68,6 +77,22 @@ export function PlayerCursors() {
               transition: 'left 80ms linear, top 80ms linear',
             }}
           >
+            {/* Dragged item preview — shown above the cursor while dragging */}
+            {draggedItem && (
+              <div className="mb-1 h-12 w-12 rounded-lg overflow-hidden border border-white/20 shadow-lg -translate-y-14 -translate-x-1">
+                {draggedItem.kind === 'text' ? (
+                  <div className="h-full w-full flex items-center justify-center bg-[#1e1e2e] text-white text-[9px] font-bold text-center px-1 leading-tight">
+                    {draggedItem.text}
+                  </div>
+                ) : (
+                  <img
+                    src={getItemSrc(draggedItem)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                )}
+              </div>
+            )}
             {/* Arrow */}
             <svg width="12" height="16" viewBox="0 0 12 16" fill="none" className="drop-shadow">
               <path d="M0 0 L0 14 L4 10 L7 16 L9 15 L6 9 L12 9 Z" fill="white" />
