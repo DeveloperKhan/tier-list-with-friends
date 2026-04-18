@@ -57,7 +57,7 @@ export function discordAvatarUrl(userId: string, avatar: string | null): string 
 }
 
 /** Return the display src for any item, regardless of kind. */
-export function getItemSrc(item: { kind: string; dataUrl: string; imageUrl: string; text: string }): string {
+export function getItemSrc(item: { id?: string; kind: string; dataUrl: string; imageUrl: string; text: string }): string {
   if (item.kind === 'tiermaker') {
     // img.src from Playwright gives full URLs; CSS background-image may give relative paths.
     // The sidecar /image proxy requires a full https://tiermaker.com/images/ URL.
@@ -67,5 +67,8 @@ export function getItemSrc(item: { kind: string; dataUrl: string; imageUrl: stri
     return `/api/tiermaker/image?url=${encodeURIComponent(url)}`;
   }
   if (item.kind === 'text') return textToDataUrl(item.text);
-  return item.dataUrl;
+  // For uploads: use the local dataUrl when available (SetupPage preview before
+  // START_GAME), otherwise fetch from the server image store via /api/image/:id
+  // (PlayingPage — server strips dataUrl from STATE_UPDATE to keep payloads small).
+  return item.dataUrl || `/api/image/${item.id}`;
 }

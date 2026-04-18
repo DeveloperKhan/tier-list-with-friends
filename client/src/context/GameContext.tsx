@@ -21,12 +21,13 @@ export type Participant = {
 export type ImageItem = {
   id: string;
   /** How the image is sourced:
-   *  - 'upload'    → locally uploaded file, encoded as base64 in `dataUrl`
+   *  - 'upload'    → user-uploaded file; blob lives in server images store,
+   *                  served via GET /api/image/:id. dataUrl is always "" here.
    *  - 'tiermaker' → TierMaker CDN reference stored in `imageUrl`
    *  - 'text'      → rendered text tile, content stored in `text`
    */
   kind: 'upload' | 'tiermaker' | 'text';
-  dataUrl: string;   // base64 data URI — only populated for kind='upload'
+  dataUrl: string;   // always "" in STATE_UPDATE — blob is served via /api/image/:id
   imageUrl: string;  // TierMaker relative path — only populated for kind='tiermaker'
   text: string;      // tile text — only populated for kind='text'
   fileName: string;

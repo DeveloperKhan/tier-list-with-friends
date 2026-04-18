@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n sidecar,server,client -c magenta,blue,green \"npm start --prefix sidecar\" \"npm start --prefix server\" \"npm run dev --prefix client\"",
-    "dev:server": "concurrently -n sidecar,server -c magenta,blue \"npm start --prefix sidecar\" \"npm start --prefix server\""
+    "dev": "concurrently -n server,client -c blue,green --kill-timeout 1000 \"npm start --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm start --prefix server"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"
