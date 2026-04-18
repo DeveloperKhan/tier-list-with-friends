@@ -77,9 +77,9 @@ export function PlayerCursors() {
               transition: 'left 80ms linear, top 80ms linear',
             }}
           >
-            {/* Dragged item preview — shown above the cursor while dragging */}
+            {/* Dragged item preview — floats above the cursor, out of flow */}
             {draggedItem && (
-              <div className="mb-1 h-12 w-12 rounded-lg overflow-hidden border border-white/20 shadow-lg -translate-y-14 -translate-x-1">
+              <div className="absolute bottom-full mb-2 h-12 w-12 rounded-lg overflow-hidden border border-white/20 shadow-lg">
                 {draggedItem.kind === 'text' ? (
                   <div className="h-full w-full flex items-center justify-center bg-[#1e1e2e] text-white text-[9px] font-bold text-center px-1 leading-tight">
                     {draggedItem.text}
