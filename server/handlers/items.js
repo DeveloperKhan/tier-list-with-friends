@@ -72,7 +72,11 @@ export function registerItemHandlers(io, socket) {
         item.ownedBy = info.userId;
       }
     } else {
-      room.bankItemIds.push(itemId);
+      const idx =
+        typeof destination?.index === "number"
+          ? Math.min(destination.index, room.bankItemIds.length)
+          : room.bankItemIds.length;
+      room.bankItemIds.splice(idx, 0, itemId);
       item.ownedBy = null;
     }
 

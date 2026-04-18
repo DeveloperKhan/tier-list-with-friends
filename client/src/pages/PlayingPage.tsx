@@ -151,6 +151,15 @@ function TierItemSlot({ itemId, children }: { itemId: string; children: React.Re
   );
 }
 
+function BankItemSlot({ itemId, children }: { itemId: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `bank-slot:${itemId}` });
+  return (
+    <div ref={setNodeRef} className={cn('rounded-lg', isOver && 'ring-2 ring-blue-400')}>
+      {children}
+    </div>
+  );
+}
+
 function TierDropZone({
   tier,
   items,
@@ -301,13 +310,13 @@ function BankDropZone({
           const item = items[id];
           if (!item) return null;
           return (
-            <DraggableItem
-              key={id}
-              item={item}
-              currentUserId={currentUserId}
-              participants={participants}
-
-            />
+            <BankItemSlot key={id} itemId={id}>
+              <DraggableItem
+                item={item}
+                currentUserId={currentUserId}
+                participants={participants}
+              />
+            </BankItemSlot>
           );
         })}
 
@@ -774,6 +783,14 @@ export function PlayingPage() {
 
     if (overId === 'bank') {
       socket!.emit('MOVE_ITEM', { itemId: active.id, destination: { type: 'bank' } });
+    } else if (overId.startsWith('bank-slot:')) {
+      const targetItemId = overId.slice('bank-slot:'.length);
+      const index = roomState!.bankItemIds.indexOf(targetItemId);
+      if (index !== -1) {
+        socket!.emit('MOVE_ITEM', { itemId: active.id, destination: { type: 'bank', index } });
+      } else {
+        socket!.emit('UNLOCK_ITEM', { itemId: active.id });
+      }
     } else if (overId.startsWith('slot:')) {
       const targetItemId = overId.slice(5);
       const tier = roomState!.tiers.find((t) => t.itemIds.includes(targetItemId));
