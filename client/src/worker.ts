@@ -41,6 +41,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const IMAGE_TTL_MS = 24 * 60 * 60 * 1000;
 // 100 KB max after client-side preprocessing
 const MAX_UPLOAD_BYTES = 100_000;
+// 5 MB max for tier-list export renders
+const MAX_EXPORT_BYTES = 5_000_000;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -121,6 +123,41 @@ export default {
         headers: {
           'Content-Type': contentType,
           'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+
+    // Upload a tier-list export render to R2. Returns { exportId }.
+    // Stored under the "exports/" prefix; the same 24-hour CRON cleanup applies.
+    if (request.method === 'POST' && url.pathname === '/api/export/upload') {
+      const contentType = request.headers.get('content-type') ?? '';
+      if (!contentType.startsWith('image/')) {
+        return Response.json({ error: 'Only image/* content types accepted.' }, { status: 400 });
+      }
+      const body = await request.arrayBuffer();
+      if (body.byteLength > MAX_EXPORT_BYTES) {
+        return Response.json({ error: 'Export image too large (max 5 MB).' }, { status: 413 });
+      }
+      const exportId = crypto.randomUUID();
+      await env.R2_BUCKET.put(`exports/${exportId}`, body, {
+        httpMetadata: { contentType },
+        customMetadata: { expiresAt: String(Date.now() + IMAGE_TTL_MS) },
+      });
+      return Response.json({ exportId });
+    }
+
+    // Serve a tier-list export from R2.
+    const exportMatch = url.pathname.match(/^\/api\/export\/([0-9a-f-]+)$/i);
+    if (exportMatch && request.method === 'GET') {
+      const id = exportMatch[1];
+      if (!UUID_RE.test(id)) return new Response(null, { status: 400 });
+      const obj = await env.R2_BUCKET.get(`exports/${id}`);
+      if (!obj) return new Response(null, { status: 404 });
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': obj.httpMetadata?.contentType ?? 'image/jpeg',
+          'Cache-Control': 'public, max-age=3600',
+          'Content-Disposition': 'attachment; filename="tier-list.jpg"',
         },
       });
     }

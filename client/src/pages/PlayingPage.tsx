@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import squareLogoUrl from '../../assets/square-logo.svg?url';
 import {
   DndContext,
   DragOverlay,
@@ -536,6 +537,46 @@ function EditTiersModal({
 }
 
 // ---------------------------------------------------------------------------
+// ExportModal
+// ---------------------------------------------------------------------------
+
+function ExportModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <Panel className="flex w-full max-w-sm flex-col gap-4 p-5">
+        <div className="flex items-center justify-between">
+          <span className="font-black text-white">Export Ready</span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors text-lg leading-none">✕</button>
+        </div>
+        <p className="text-xs text-white/60">
+          Open the link below in a browser to download your tier list image.{' '}
+          <span className="font-bold text-yellow-400">This link expires in 24 hours.</span>
+        </p>
+        <div className="flex gap-1.5">
+          <input
+            readOnly
+            value={url}
+            className="game-input flex-1 py-1 text-xs"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+          />
+          <GameButton variant="primary" size="sm" onClick={handleCopy}>
+            {copied ? '✓' : 'Copy'}
+          </GameButton>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // End Session Confirm
 // ---------------------------------------------------------------------------
 
@@ -641,6 +682,7 @@ export function PlayingPage() {
   const [showEditTiers, setShowEditTiers] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   const [showDrawBar, setShowDrawBar] = useState(true);
   const [drawingsHidden, setDrawingsHidden] = useState(false);
@@ -927,17 +969,67 @@ export function PlayingPage() {
       });
       const totalH = tierHeights.reduce((a, b) => a + b, 0);
 
+      const HEADER_H = 56;
+      const ACCENT_H = 3;
+
+      // Load logo in parallel with images
+      const logoImg = await new Promise<HTMLImageElement>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(img);
+        img.src = squareLogoUrl;
+      });
+
       const canvas = document.createElement('canvas');
       canvas.width = CANVAS_W * SCALE;
-      canvas.height = totalH * SCALE;
+      canvas.height = (HEADER_H + totalH) * SCALE;
       const ctx = canvas.getContext('2d')!;
       ctx.scale(SCALE, SCALE);
 
-      // Background
+      // Full background
       ctx.fillStyle = '#0f0f1a';
-      ctx.fillRect(0, 0, CANVAS_W, totalH);
+      ctx.fillRect(0, 0, CANVAS_W, HEADER_H + totalH);
 
-      let y = 0;
+      // Header background (slightly lighter)
+      ctx.fillStyle = '#0d0d22';
+      ctx.fillRect(0, 0, CANVAS_W, HEADER_H);
+
+      // Gradient accent bar along the top
+      const grad = ctx.createLinearGradient(0, 0, CANVAS_W, 0);
+      grad.addColorStop(0, '#ec4899');
+      grad.addColorStop(0.5, '#a855f7');
+      grad.addColorStop(1, '#06b6d4');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, CANVAS_W, ACCENT_H);
+
+      // Header separator
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(0, HEADER_H - 1, CANVAS_W, 1);
+
+      // Logo + text group, centered
+      const LOGO_SIZE = 32;
+      const LOGO_GAP = 10;
+      const WATERMARK = 'Tier Lists with Friends';
+      ctx.font = 'bold 18px sans-serif';
+      const groupW = LOGO_SIZE + LOGO_GAP + ctx.measureText(WATERMARK).width;
+      const groupX = (CANVAS_W - groupW) / 2;
+      const centerY = ACCENT_H + (HEADER_H - ACCENT_H) / 2;
+
+      // Logo clipped to rounded square
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(groupX, centerY - LOGO_SIZE / 2, LOGO_SIZE, LOGO_SIZE, 7);
+      ctx.clip();
+      ctx.drawImage(logoImg, groupX, centerY - LOGO_SIZE / 2, LOGO_SIZE, LOGO_SIZE);
+      ctx.restore();
+
+      // Watermark text
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(WATERMARK, groupX + LOGO_SIZE + LOGO_GAP, centerY);
+
+      let y = HEADER_H;
       for (let i = 0; i < tiers.length; i++) {
         const tier = tiers[i];
         const h = tierHeights[i];
@@ -1013,10 +1105,28 @@ export function PlayingPage() {
         y += h;
       }
 
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = `${roomState!.title || 'tier-list'}.png`;
-      a.click();
+      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalDev) {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/jpeg', 0.92);
+        a.download = `${roomState!.title || 'tier-list'}.jpg`;
+        a.click();
+      } else {
+        const blob = await new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', 0.92),
+        );
+        const res = await fetch('/api/export/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: blob,
+        });
+        if (!res.ok) {
+          const { error } = await res.json() as { error?: string };
+          throw new Error(error ?? 'Upload failed');
+        }
+        const { exportId } = await res.json() as { exportId: string };
+        setExportUrl(`${window.location.origin}/api/export/${exportId}`);
+      }
     } catch (err) {
       console.error('[export]', err);
       setToast('Export failed. Please try again.');
@@ -1302,6 +1412,10 @@ export function PlayingPage() {
           onConfirm={handleEndSession}
           onCancel={() => setShowEndConfirm(false)}
         />
+      )}
+
+      {exportUrl && (
+        <ExportModal url={exportUrl} onClose={() => setExportUrl(null)} />
       )}
 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
