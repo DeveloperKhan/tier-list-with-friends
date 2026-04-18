@@ -310,11 +310,11 @@ export function SetupPage() {
     if (labels.length === 0) return;
 
     const currentCount = Object.keys(items).length;
-    if (currentCount >= 100) return;
+    if (currentCount >= 300) return;
 
     const newEntries: LocalItem[] = [];
     for (const label of labels) {
-      if (currentCount + newEntries.length >= 100) break;
+      if (currentCount + newEntries.length >= 300) break;
       const id = crypto.randomUUID();
       newEntries.push({ id, kind: 'text', imageUrl: '', text: label, fileName: label });
     }
@@ -330,11 +330,11 @@ export function SetupPage() {
 
   function loadTemplate(loaded: Array<{ kind: 'tiermaker'; imageUrl: string; fileName: string }>) {
     const currentCount = Object.keys(items).length;
-    if (currentCount >= 100) return;
+    if (currentCount >= 300) return;
 
     const newEntries: LocalItem[] = [];
     for (const item of loaded) {
-      if (currentCount + newEntries.length >= 100) break;
+      if (currentCount + newEntries.length >= 300) break;
       const id = crypto.randomUUID();
       newEntries.push({ id, kind: 'tiermaker', imageUrl: item.imageUrl, text: '', fileName: item.fileName });
     }
@@ -444,7 +444,7 @@ export function SetupPage() {
               <Panel className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <SectionLabel>Images</SectionLabel>
-                  <span className="text-xs font-bold text-white/40">{itemCount} / 100</span>
+                  <span className="text-xs font-bold text-white/40">{itemCount} / 300</span>
                 </div>
 
                 <div
@@ -469,7 +469,7 @@ export function SetupPage() {
                     variant="ghost"
                     size="sm"
                     className="flex-1"
-                    disabled={uploading || itemCount >= 100}
+                    disabled={uploading || itemCount >= 300}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     {uploading
@@ -480,7 +480,7 @@ export function SetupPage() {
                     variant="primary"
                     size="sm"
                     className="flex-1"
-                    disabled={itemCount >= 100}
+                    disabled={itemCount >= 300}
                     onClick={() => setShowTierMaker(true)}
                   >
                     <Gamepad2 className="text-purple-400 inline mr-1.5" size={14} />TierMaker
@@ -511,7 +511,7 @@ export function SetupPage() {
                     <GameButton
                       variant="ghost"
                       size="sm"
-                      disabled={textInput.trim().length === 0 || itemCount >= 100}
+                      disabled={textInput.trim().length === 0 || itemCount >= 300}
                       onClick={addTextItems}
                     >
                       Add
