@@ -51,6 +51,16 @@ export type RoomState = {
   items: Record<string, ImageItem>;
   bankItemIds: string[];
   participants: Record<string, Participant>;
+  failedDuels: Record<string, string[]>; // itemId -> userId[]
+};
+
+export type DuelResult = {
+  itemId: string;
+  challengerId: string;
+  ownerId: string;
+  challengerMove: 'rock' | 'paper' | 'scissors';
+  ownerMove: 'rock' | 'paper' | 'scissors';
+  winnerId: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -75,6 +85,9 @@ type GameContextValue = {
   resetSession: () => void;
   /** Live cursor positions for all other players: userId → {x, y} (0-1 normalized) */
   cursors: Record<string, CursorPosition>;
+  /** Active duel result waiting to be animated, null when idle */
+  activeDuel: DuelResult | null;
+  clearActiveDuel: () => void;
 };
 
 const GameContext = createContext<GameContextValue>({
@@ -88,6 +101,8 @@ const GameContext = createContext<GameContextValue>({
   sessionEnded: false,
   resetSession: () => {},
   cursors: {},
+  activeDuel: null,
+  clearActiveDuel: () => {},
 });
 
 // ---------------------------------------------------------------------------
@@ -102,6 +117,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [lockRejected, setLockRejected] = useState<{ itemId: string; lockedBy: string } | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
   const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
+  const [activeDuel, setActiveDuel] = useState<DuelResult | null>(null);
   // Stable refs so the connect handler always sees fresh values without
   // needing to be re-registered (avoids stale closures on reconnect).
   const discordRef = useRef(discord);
@@ -172,6 +188,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setCursors((prev) => ({ ...prev, [userId]: { x, y } }));
     });
 
+    sock.on('DUEL_RESULT', (result: DuelResult) => {
+      setActiveDuel(result);
+    });
+
     sock.on('CURSOR_REMOVE', ({ userId }: { userId: string }) => {
       setCursors((prev) => {
         const next = { ...prev };
@@ -213,6 +233,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     <GameContext.Provider value={{
       roomState, socket, currentUserId, isHost, rejectionReason,
       lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, resetSession, cursors,
+      activeDuel, clearActiveDuel: () => setActiveDuel(null),
     }}>
       {children}
     </GameContext.Provider>

@@ -21,6 +21,7 @@ function collisionDetection(...args: Parameters<typeof rectIntersection>) {
 }
 import { useGame, type ImageItem, type Participant, type Tier } from '@/context/GameContext';
 import { PlayerCursors } from '@/components/PlayerCursors';
+import { DuelCutscene } from '@/components/DuelCutscene';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
@@ -53,12 +54,15 @@ function DraggableItem({
   currentUserId,
   participants,
   isDragOverlay = false,
-
+  canDuel = false,
+  onDuel,
 }: {
   item: ImageItem;
   currentUserId: string;
   participants: Record<string, Participant>;
   isDragOverlay?: boolean;
+  canDuel?: boolean;
+  onDuel?: (itemId: string) => void;
 }) {
   const isLockedByOther = item.lockedBy !== null && item.lockedBy !== currentUserId;
   const isOwnedByOther = item.ownedBy !== null && item.ownedBy !== currentUserId;
@@ -75,7 +79,7 @@ function DraggableItem({
 
   const blockerId = isLockedByOther ? item.lockedBy! : isOwnedByOther ? item.ownedBy! : null;
   const blocker = blockerId ? participants[blockerId] : null;
-  const blockerLabel = isLockedByOther ? 'Moving…' : 'Owned by';
+  const blockerLabel = isLockedByOther ? 'Moving…' : 'Placed by';
 
   return (
     <div
@@ -83,22 +87,28 @@ function DraggableItem({
       style={style}
       {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
-        'group relative aspect-square w-14 flex-shrink-0 overflow-hidden rounded-lg bg-white/10',
+        'group relative aspect-square w-14 flex-shrink-0 rounded-lg bg-white/10',
         canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing touch-none',
-        isLockedByOther && 'pointer-events-none opacity-50',
-        isOwnedByOther && 'pointer-events-none opacity-75 ring-1 ring-white/20',
+        isLockedByOther && 'opacity-50 cursor-not-allowed',
+        isOwnedByOther && 'opacity-75 ring-1 ring-white/20 cursor-not-allowed',
         isDragging && !isDragOverlay && 'opacity-0',
         isDragOverlay && 'scale-105 cursor-grabbing shadow-2xl ring-2 ring-purple-400',
       )}
     >
-      <img
-        src={getItemSrc(item)}
-        alt={item.fileName}
-        draggable={false}
-        className="h-full w-full object-cover"
-      />
+      {/* Image clipped independently so the tooltip can escape */}
+      <div className="absolute inset-0 rounded-lg overflow-hidden">
+        <img
+          src={getItemSrc(item)}
+          alt={item.fileName}
+          draggable={false}
+          className="h-full w-full object-cover"
+        />
+      </div>
       {blocker && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+        <div className={cn(
+          'absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 w-max opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50',
+          canDuel ? 'pointer-events-auto hover:opacity-100' : 'pointer-events-none',
+        )}>
           <div className="flex items-center gap-1.5 rounded-lg bg-black/90 px-2 py-1.5 shadow-xl border border-white/10 whitespace-nowrap">
             <img
               src={discordAvatarUrl(blockerId!, blocker.avatar)}
@@ -109,6 +119,14 @@ function DraggableItem({
               <span className="text-white/50 text-[9px]">{blockerLabel}</span>
               <span className="text-white text-[10px] font-semibold">{blocker.username}</span>
             </div>
+            {canDuel && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDuel?.(item.id); }}
+                className="ml-1 rounded-md bg-purple-600 hover:bg-purple-500 px-1.5 py-0.5 text-[10px] font-black text-white transition-colors"
+              >
+                ⚔️ Duel
+              </button>
+            )}
           </div>
           {/* Caret */}
           <div className="mx-auto w-2 h-1 overflow-hidden flex justify-center">
@@ -138,11 +156,15 @@ function TierDropZone({
   items,
   currentUserId,
   participants,
+  failedDuels,
+  onDuel,
 }: {
   tier: Tier;
   items: Record<string, ImageItem>;
   currentUserId: string;
   participants: Record<string, Participant>;
+  failedDuels: Record<string, string[]>;
+  onDuel: (itemId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: tier.id });
 
@@ -157,13 +179,16 @@ function TierDropZone({
       {tier.itemIds.map((id) => {
         const item = items[id];
         if (!item) return null;
+        const isOwnedByOther = item.ownedBy !== null && item.ownedBy !== currentUserId;
+        const alreadyLost = (failedDuels[id] ?? []).includes(currentUserId);
         return (
           <TierItemSlot key={id} itemId={id}>
             <DraggableItem
               item={item}
               currentUserId={currentUserId}
               participants={participants}
-
+              canDuel={isOwnedByOther && !alreadyLost}
+              onDuel={onDuel}
             />
           </TierItemSlot>
         );
@@ -476,7 +501,7 @@ function EndSessionConfirm({
 // ---------------------------------------------------------------------------
 
 export function PlayingPage() {
-  const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected } = useGame();
+  const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected, activeDuel, clearActiveDuel } = useGame();
   const [activeItem, setActiveItem] = useState<ImageItem | null>(null);
   const [showEditTiers, setShowEditTiers] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -690,6 +715,8 @@ export function PlayingPage() {
                   items={roomState.items}
                   currentUserId={currentUserId}
                   participants={roomState.participants}
+                  failedDuels={roomState.failedDuels ?? {}}
+                  onDuel={(itemId) => socket?.emit('DUEL_CHALLENGE', { itemId })}
                 />
               </div>
             ))}
@@ -742,6 +769,15 @@ export function PlayingPage() {
       )}
 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+
+      {activeDuel && (activeDuel.challengerId === currentUserId || activeDuel.ownerId === currentUserId) && (
+        <DuelCutscene
+          result={activeDuel}
+          participants={roomState.participants}
+          currentUserId={currentUserId}
+          onDone={clearActiveDuel}
+        />
+      )}
 
       <PlayerCursors />
     </>

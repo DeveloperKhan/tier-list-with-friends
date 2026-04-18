@@ -128,6 +128,7 @@ function createRoom(instanceId, hostId) {
     items: {},
     bankItemIds: [],
     participants: {},
+    failedDuels: {},   // itemId -> userId[] who lost and cannot challenge again
   };
 }
 
@@ -617,6 +618,45 @@ io.on("connection", (socket) => {
     }
 
     io.to(info.instanceId).emit("STATE_UPDATE", room);
+  });
+
+  // ── DUEL_CHALLENGE ───────────────────────────────────────────────────────
+  socket.on("DUEL_CHALLENGE", ({ itemId }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    const { instanceId, userId: challengerId } = info;
+    const room = rooms.get(instanceId);
+    if (!room || room.phase !== "PLAYING") return;
+
+    const item = room.items[itemId];
+    if (!item || !item.ownedBy || item.ownedBy === challengerId) return;
+
+    // Block repeat challenges after a loss
+    if ((room.failedDuels[itemId] ?? []).includes(challengerId)) return;
+
+    const ownerId = item.ownedBy;
+    const moves = ["rock", "paper", "scissors"];
+    const beats = { rock: "scissors", scissors: "paper", paper: "rock" };
+
+    let challengerMove, ownerMove;
+    do {
+      challengerMove = moves[Math.floor(Math.random() * 3)];
+      ownerMove = moves[Math.floor(Math.random() * 3)];
+    } while (challengerMove === ownerMove); // re-roll ties
+
+    const winnerId = beats[challengerMove] === ownerMove ? challengerId : ownerId;
+
+    if (winnerId === challengerId) {
+      item.ownedBy = challengerId;
+    } else {
+      if (!room.failedDuels[itemId]) room.failedDuels[itemId] = [];
+      room.failedDuels[itemId].push(challengerId);
+    }
+
+    io.to(instanceId).emit("DUEL_RESULT", {
+      itemId, challengerId, ownerId, challengerMove, ownerMove, winnerId,
+    });
+    io.to(instanceId).emit("STATE_UPDATE", room);
   });
 
   // ── CURSOR_MOVE ─────────────────────────────────────────────────────────
