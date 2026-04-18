@@ -20,6 +20,7 @@ function collisionDetection(...args: Parameters<typeof rectIntersection>) {
   return hits.length > 0 ? hits : rectIntersection(...args);
 }
 import { useGame, type ImageItem, type Participant, type Tier } from '@/context/GameContext';
+import { PlayerCursors } from '@/components/PlayerCursors';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
@@ -732,6 +733,8 @@ export function PlayingPage() {
       )}
 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+
+      <PlayerCursors />
     </>
   );
 }

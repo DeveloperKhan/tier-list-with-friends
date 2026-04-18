@@ -57,6 +57,8 @@ export type RoomState = {
 // Context value
 // ---------------------------------------------------------------------------
 
+export type CursorPosition = { x: number; y: number };
+
 type GameContextValue = {
   roomState: RoomState | null;
   socket: Socket | null;
@@ -71,6 +73,8 @@ type GameContextValue = {
   sessionEnded: boolean;
   /** Re-join the room after a session ends, starting a fresh game */
   resetSession: () => void;
+  /** Live cursor positions for all other players: userId → {x, y} (0-1 normalized) */
+  cursors: Record<string, CursorPosition>;
 };
 
 const GameContext = createContext<GameContextValue>({
@@ -83,6 +87,7 @@ const GameContext = createContext<GameContextValue>({
   clearLockRejected: () => {},
   sessionEnded: false,
   resetSession: () => {},
+  cursors: {},
 });
 
 // ---------------------------------------------------------------------------
@@ -96,6 +101,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [lockRejected, setLockRejected] = useState<{ itemId: string; lockedBy: string } | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
   // Stable refs so the connect handler always sees fresh values without
   // needing to be re-registered (avoids stale closures on reconnect).
   const discordRef = useRef(discord);
@@ -159,6 +165,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     sock.on('PHASE_RESET', () => {
       setRoomState(null);
       setSessionEnded(true);
+      setCursors({});
+    });
+
+    sock.on('CURSOR_UPDATE', ({ userId, x, y }: { userId: string; x: number; y: number }) => {
+      setCursors((prev) => ({ ...prev, [userId]: { x, y } }));
+    });
+
+    sock.on('CURSOR_REMOVE', ({ userId }: { userId: string }) => {
+      setCursors((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
     });
 
     sock.on('connect_error', (err) => {
@@ -193,7 +212,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       roomState, socket, currentUserId, isHost, rejectionReason,
-      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, resetSession,
+      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, resetSession, cursors,
     }}>
       {children}
     </GameContext.Provider>

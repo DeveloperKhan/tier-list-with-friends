@@ -619,6 +619,18 @@ io.on("connection", (socket) => {
     io.to(info.instanceId).emit("STATE_UPDATE", room);
   });
 
+  // ── CURSOR_MOVE ─────────────────────────────────────────────────────────
+  socket.on("CURSOR_MOVE", ({ x, y }) => {
+    const info = socketInfo.get(socket.id);
+    if (!info) return;
+    // Relay to everyone else in the room — not back to sender
+    socket.to(info.instanceId).emit("CURSOR_UPDATE", {
+      userId: info.userId,
+      x: Math.max(0, Math.min(1, Number(x) || 0)),
+      y: Math.max(0, Math.min(1, Number(y) || 0)),
+    });
+  });
+
   // ── END_SESSION (host only) ──────────────────────────────────────────────
   socket.on("END_SESSION", () => {
     const info = socketInfo.get(socket.id);
@@ -653,6 +665,9 @@ io.on("connection", (socket) => {
     // If this user still has another socket open, nothing else to do.
     const userStillConnected = [...sockets.values()].some((uid) => uid === userId);
     if (userStillConnected) return;
+
+    // Remove cursor from all other clients immediately.
+    socket.to(instanceId).emit("CURSOR_REMOVE", { userId });
 
     // Immediately release any active drag lock so other players aren't
     // blocked for the entire grace period. Owned placements stay in place.
