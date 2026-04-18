@@ -46,9 +46,49 @@ export default {
       return Response.json({ access_token: data.access_token });
     }
 
+    // Image proxy — handled entirely at the Worker edge, never touches Render.
+    // Fetches directly from TierMaker's CDN with browser-spoofed headers and
+    // caches the result for 24 h so each unique image is fetched from CDN once.
+    if (url.pathname === '/api/tiermaker/image') {
+      const imgUrl = url.searchParams.get('url') ?? '';
+      if (!imgUrl.startsWith('https://tiermaker.com/images/')) {
+        return Response.json({ error: 'Only tiermaker.com/images/* URLs are accepted.' }, { status: 400 });
+      }
+
+      const cache = (caches as unknown as { default: Cache }).default;
+      const cached = await cache.match(request);
+      if (cached) return cached;
+
+      try {
+        const upstream = await fetch(imgUrl, {
+          headers: {
+            Referer: 'https://tiermaker.com/',
+            Origin: 'https://tiermaker.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        });
+        if (!upstream.ok) return new Response(null, { status: upstream.status });
+        const response = new Response(upstream.body, {
+          status: 200,
+          headers: {
+            'Content-Type': upstream.headers.get('content-type') ?? 'image/jpeg',
+            'Cache-Control': 'public, max-age=86400',
+          },
+        });
+        await cache.put(request, response.clone());
+        return response;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: `Image fetch failed: ${message}` }, { status: 502 });
+      }
+    }
+
     // Proxy /api/tiermaker/* and /ws/* to the backend.
     if (url.pathname.startsWith('/api/tiermaker/') || url.pathname.startsWith('/ws/')) {
       const target = (env.BACKEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+
       try {
         const upstream = await fetch(`${target}${url.pathname}${url.search}`, {
           method: request.method,

@@ -20,11 +20,12 @@ type Template = {
   items: TemplateItem[];
 };
 
-function directImg(tiermakerUrl: string) {
+function proxyImg(tiermakerUrl: string) {
   if (!tiermakerUrl) return '';
-  return tiermakerUrl.startsWith('/')
+  const url = tiermakerUrl.startsWith('/')
     ? `https://tiermaker.com${tiermakerUrl}`
     : tiermakerUrl;
+  return `/api/tiermaker/image?url=${encodeURIComponent(url)}`;
 }
 
 export type TierMakerTemplateItem = {
@@ -167,7 +168,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
             >
               {r.thumbnailUrl ? (
                 <img
-                  src={directImg(r.thumbnailUrl)}
+                  src={proxyImg(r.thumbnailUrl)}
                   alt={r.name}
                   className="h-10 w-10 rounded-lg object-cover flex-none bg-white/10"
                 />
@@ -207,7 +208,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
                       className="aspect-square rounded-lg overflow-hidden bg-white/10"
                     >
                       <img
-                        src={directImg(item.imageUrl)}
+                        src={proxyImg(item.imageUrl)}
                         alt={`item ${item.id}`}
                         className="h-full w-full object-cover"
                         loading="lazy"

@@ -76,33 +76,9 @@ app.get("/api/tiermaker/search", (req, res) =>
 app.get("/api/tiermaker/template", (req, res) =>
   proxyToSidecar(`/template?url=${encodeURIComponent(req.query.url ?? "")}`, res)
 );
-app.get("/api/tiermaker/image", async (req, res) => {
-  const url = String(req.query.url ?? "");
-  if (!url.startsWith("https://tiermaker.com/images/")) {
-    return res.status(400).json({ error: "Only tiermaker.com/images/* URLs are accepted." });
-  }
-  try {
-    const upstream = await fetch(url, {
-      headers: {
-        Referer: "https://tiermaker.com/",
-        Origin: "https://tiermaker.com",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept: "image/webp,image/apng,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-    if (!upstream.ok) return res.status(upstream.status).end();
-    const contentType = upstream.headers.get("content-type") ?? "image/jpeg";
-    const cacheControl = upstream.headers.get("cache-control");
-    res.set("Content-Type", contentType);
-    if (cacheControl) res.set("Cache-Control", cacheControl);
-    upstream.body.pipe(res);
-  } catch (err) {
-    console.error("[image proxy]", err.message);
-    res.status(502).end();
-  }
-});
+// /api/tiermaker/image is handled entirely by the Cloudflare Worker edge —
+// it fetches from TierMaker CDN directly and caches for 24 h. Render never
+// receives image requests in production.
 
 app.get("/health", (_req, res) => res.sendStatus(200));
 
