@@ -1,6 +1,7 @@
 import { useGame } from '@/context/GameContext';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { Panel } from '@/components/ui/Panel';
+import { SetupBackground } from '@/components/ui/SetupBackground';
 import { Hourglass, Crown } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 
@@ -28,7 +29,8 @@ export function WaitingPage() {
   const hostName = hostParticipant?.username ?? 'the host';
 
   return (
-    <div className="flex h-full flex-col bg-game-bg overflow-hidden">
+    <div className="relative flex h-full flex-col bg-game-bg overflow-hidden">
+      <SetupBackground />
       {/* Decorative gradient top strip */}
       <div className="h-1 w-full bg-gradient-to-r from-game-pink via-game-purple to-game-cyan flex-none" />
 
