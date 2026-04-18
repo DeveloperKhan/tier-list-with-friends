@@ -3,6 +3,7 @@ import { registerItemHandlers } from "./items.js";
 import { registerTierHandlers } from "./tiers.js";
 import { registerDuelHandlers } from "./duel.js";
 import { registerCursorHandlers } from "./cursor.js";
+import { registerDrawHandlers } from "./draw.js";
 import { registerDisconnectHandler } from "./disconnect.js";
 
 export function registerHandlers(io, socket) {
@@ -11,5 +12,6 @@ export function registerHandlers(io, socket) {
   registerTierHandlers(io, socket);
   registerDuelHandlers(io, socket);
   registerCursorHandlers(io, socket);
+  registerDrawHandlers(io, socket);
   registerDisconnectHandler(io, socket);
 }

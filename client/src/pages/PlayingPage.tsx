@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -26,7 +26,7 @@ import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Download, Layers, LogOut, Plus, Trash2, Type, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -506,7 +506,40 @@ export function PlayingPage() {
   const [showEditTiers, setShowEditTiers] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [drawTool, setDrawTool] = useState<'grab' | 'pen'>('grab');
+  const [showDrawBar, setShowDrawBar] = useState(true);
+  const [drawingsHidden, setDrawingsHidden] = useState(false);
   const tierListRef = useRef<HTMLDivElement>(null);
+  const drawContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawingRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  const drawColor = useMemo(() => {
+    const palette = ['#FF4444', '#FF8C00', '#FFD700', '#32CD32', '#1E90FF', '#9932CC', '#FF69B4', '#00CED1', '#FF6B35', '#4ECDC4'];
+    if (!currentUserId) return palette[0];
+    let hash = 0;
+    for (let i = 0; i < currentUserId.length; i++) {
+      hash = ((hash << 5) - hash) + currentUserId.charCodeAt(i);
+      hash |= 0;
+    }
+    return palette[Math.abs(hash) % palette.length];
+  }, [currentUserId]);
+
+  // Size canvas to match its container; clears on resize (acceptable trade-off)
+  useEffect(() => {
+    const container = drawContainerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+    const sync = () => {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -522,7 +555,110 @@ export function PlayingPage() {
     clearLockRejected();
   }, [lockRejected, roomState, clearLockRejected]);
 
+  // Receive remote draw events and render onto the shared canvas
+  useEffect(() => {
+    if (!socket) return;
+    const canvas = () => canvasRef.current;
+    const ctx = () => canvas()?.getContext('2d') ?? null;
+
+    function onStroke({ x0, y0, x1, y1, color }: { x0: number; y0: number; x1: number; y1: number; color: string }) {
+      const c = canvas(); const g = ctx();
+      if (!c || !g) return;
+      g.beginPath();
+      g.moveTo(x0 * c.width, y0 * c.height);
+      g.lineTo(x1 * c.width, y1 * c.height);
+      g.strokeStyle = color; g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round';
+      g.stroke();
+    }
+
+    function onDot({ x, y, color }: { x: number; y: number; color: string }) {
+      const c = canvas(); const g = ctx();
+      if (!c || !g) return;
+      g.beginPath();
+      g.arc(x * c.width, y * c.height, 1.5, 0, Math.PI * 2);
+      g.fillStyle = color; g.fill();
+    }
+
+    function onClear() {
+      const c = canvas();
+      if (!c) return;
+      c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
+    }
+
+    socket.on('DRAW_STROKE', onStroke);
+    socket.on('DRAW_DOT', onDot);
+    socket.on('DRAW_CLEAR', onClear);
+    return () => {
+      socket.off('DRAW_STROKE', onStroke);
+      socket.off('DRAW_DOT', onDot);
+      socket.off('DRAW_CLEAR', onClear);
+    };
+  }, [socket]);
+
   if (!roomState || !socket) return null;
+
+  // ── Canvas draw handlers ───────────────────────────────────────────────
+
+  function getCanvasPoint(e: React.PointerEvent): { x: number; y: number } | null {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function handleCanvasPointerDown(e: React.PointerEvent) {
+    if (drawTool !== 'pen') return;
+    const pt = getCanvasPoint(e);
+    if (!pt) return;
+    isDrawingRef.current = true;
+    lastPointRef.current = pt;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (ctx && canvas) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = drawColor;
+      ctx.fill();
+      socket!.emit('DRAW_DOT', { x: pt.x / canvas.width, y: pt.y / canvas.height, color: drawColor });
+    }
+  }
+
+  function handleCanvasPointerMove(e: React.PointerEvent) {
+    if (!isDrawingRef.current || drawTool !== 'pen') return;
+    const pt = getCanvasPoint(e);
+    if (!pt) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (ctx && lastPointRef.current && canvas) {
+      ctx.beginPath();
+      ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
+      ctx.lineTo(pt.x, pt.y);
+      ctx.strokeStyle = drawColor;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      socket!.emit('DRAW_STROKE', {
+        x0: lastPointRef.current.x / canvas.width, y0: lastPointRef.current.y / canvas.height,
+        x1: pt.x / canvas.width, y1: pt.y / canvas.height,
+        color: drawColor,
+      });
+    }
+    lastPointRef.current = pt;
+  }
+
+  function handleCanvasPointerUp() {
+    isDrawingRef.current = false;
+    lastPointRef.current = null;
+  }
+
+  function handleClearCanvas() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    socket!.emit('DRAW_CLEAR');
+  }
 
   // ── Drag handlers ──────────────────────────────────────────────────────
 
@@ -648,6 +784,15 @@ export function PlayingPage() {
             </h1>
 
             <div className="flex flex-shrink-0 items-center gap-2">
+              <GameButton
+                variant={showDrawBar ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setShowDrawBar((v) => !v)}
+                title="Toggle drawing tools"
+              >
+                <Pencil size={13} />
+                <span className="hidden sm:inline">Draw</span>
+              </GameButton>
               <PlayerList
                 participants={roomState.participants}
                 hostId={roomState.hostId}
@@ -680,53 +825,124 @@ export function PlayingPage() {
             </div>
           </header>
 
-          {/* Tier list */}
-          <main ref={tierListRef} className="game-scroll flex-1 overflow-y-auto bg-game-bg">
-            {roomState.tiers.map((tier) => (
-              <div
-                key={tier.id}
-                className="flex min-h-[4rem] items-stretch border-b border-white/5"
-              >
-                {/* Tier label */}
+          {/* Tier list + drawing layer */}
+          <div ref={drawContainerRef} className="relative flex-1 overflow-hidden">
+            <main ref={tierListRef} className="game-scroll h-full overflow-y-auto bg-game-bg">
+              {roomState.tiers.map((tier) => (
                 <div
-                  className="flex w-14 flex-shrink-0 items-center justify-center p-1 font-black"
-                  style={{
-                    backgroundColor: tier.color + '22',
-                    borderRight: `4px solid ${tier.color}`,
-                  }}
+                  key={tier.id}
+                  className="flex min-h-[4rem] items-stretch border-b border-white/5"
                 >
-                  <span
+                  {/* Tier label */}
+                  <div
+                    className="flex w-14 flex-shrink-0 items-center justify-center p-1 font-black"
                     style={{
-                      color: tier.color,
-                      fontSize: tier.label.length <= 2 ? '1.1rem' : tier.label.length <= 4 ? '0.8rem' : '0.6rem',
-                      wordBreak: 'break-all',
-                      overflowWrap: 'anywhere',
-                      textAlign: 'center',
-                      lineHeight: 1.15,
-                      display: 'block',
-                      width: '100%',
+                      backgroundColor: tier.color + '22',
+                      borderRight: `4px solid ${tier.color}`,
                     }}
-                  >{tier.label}</span>
+                  >
+                    <span
+                      style={{
+                        color: tier.color,
+                        fontSize: tier.label.length <= 2 ? '1.1rem' : tier.label.length <= 4 ? '0.8rem' : '0.6rem',
+                        wordBreak: 'break-all',
+                        overflowWrap: 'anywhere',
+                        textAlign: 'center',
+                        lineHeight: 1.15,
+                        display: 'block',
+                        width: '100%',
+                      }}
+                    >{tier.label}</span>
+                  </div>
+
+                  {/* Drop zone */}
+                  <TierDropZone
+                    tier={tier}
+                    items={roomState.items}
+                    currentUserId={currentUserId}
+                    participants={roomState.participants}
+                    failedDuels={roomState.failedDuels ?? {}}
+                    onDuel={(itemId) => socket?.emit('DUEL_CHALLENGE', { itemId })}
+                  />
                 </div>
+              ))}
 
-                {/* Drop zone */}
-                <TierDropZone
-                  tier={tier}
-                  items={roomState.items}
-                  currentUserId={currentUserId}
-                  participants={roomState.participants}
-                  failedDuels={roomState.failedDuels ?? {}}
-                  onDuel={(itemId) => socket?.emit('DUEL_CHALLENGE', { itemId })}
+              {roomState.tiers.length === 0 && (
+                <div className="flex h-32 items-center justify-center text-sm font-semibold text-white/30">
+                  {isHost ? 'Add tiers using the Tiers button above.' : 'No tiers yet — waiting for the host.'}
+                </div>
+              )}
+            </main>
+
+            {/* Canvas drawing overlay — pointer-events controlled by active tool */}
+            <canvas
+              ref={canvasRef}
+              className={cn(
+                'absolute inset-0 z-10 transition-opacity duration-150',
+                drawTool === 'pen' ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none',
+                drawingsHidden && 'opacity-0',
+              )}
+              onPointerDown={handleCanvasPointerDown}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={handleCanvasPointerUp}
+              onPointerCancel={handleCanvasPointerUp}
+            />
+
+            {/* Drawing toolbar — right edge of tier list */}
+            {showDrawBar && (
+              <div className="absolute right-2 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-white/10 bg-black/70 p-1.5 shadow-2xl backdrop-blur-sm">
+                {/* Player color swatch */}
+                <div
+                  className="h-4 w-4 flex-shrink-0 rounded-full border-2 border-white/30"
+                  style={{ backgroundColor: drawColor }}
+                  title="Your drawing color"
                 />
-              </div>
-            ))}
-
-            {roomState.tiers.length === 0 && (
-              <div className="flex h-32 items-center justify-center text-sm font-semibold text-white/30">
-                {isHost ? 'Add tiers using the Tiers button above.' : 'No tiers yet — waiting for the host.'}
+                <div className="h-px w-full bg-white/10" />
+                {/* Grabber */}
+                <button
+                  onClick={() => setDrawTool('grab')}
+                  title="Grabber — drag items"
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    drawTool === 'grab' ? 'bg-purple-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  <Hand size={15} />
+                </button>
+                {/* Pen */}
+                <button
+                  onClick={() => setDrawTool('pen')}
+                  title="Pen — draw on the tier list"
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    drawTool === 'pen' ? 'bg-purple-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  <Pencil size={15} />
+                </button>
+                <div className="h-px w-full bg-white/10" />
+                {/* Clear */}
+                <button
+                  onClick={handleClearCanvas}
+                  title="Clear drawings"
+                  className="rounded-lg p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-red-400"
+                >
+                  <Eraser size={15} />
+                </button>
+                {/* Hide/show drawings */}
+                <button
+                  onClick={() => setDrawingsHidden((v) => !v)}
+                  title={drawingsHidden ? 'Show drawings' : 'Hide drawings'}
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    drawingsHidden ? 'text-white/30 hover:bg-white/10 hover:text-white/60' : 'text-white/50 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  {drawingsHidden ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
             )}
-          </main>
+          </div>
 
           {/* Image bank */}
           <BankDropZone
