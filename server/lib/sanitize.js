@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import { MAX_IMAGE_BYTES } from "./constants.js";
 
 export function sanitizeTier(raw) {
   return {
@@ -17,9 +16,8 @@ export function sanitizeItem(raw, uploadedBy) {
   const id = String(raw.id ?? randomUUID()).slice(0, 36);
 
   if (raw.kind === "upload") {
-    if (typeof raw.dataUrl !== "string") return null;
-    if (!raw.dataUrl.startsWith("data:image/")) return null;
-    if (raw.dataUrl.length > MAX_IMAGE_BYTES) return null;
+    // id is the R2 key assigned by the Worker at upload time — must be a UUID
+    if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) return null;
     return {
       item: {
         id,
@@ -31,7 +29,7 @@ export function sanitizeItem(raw, uploadedBy) {
         lockedBy: null,
         ownedBy: null,
       },
-      dataUrl: raw.dataUrl,
+      dataUrl: null,
     };
   }
 

@@ -5,7 +5,8 @@ import { Panel, SectionLabel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { TierMakerBrowser, type TierMakerTemplateItem } from '@/components/TierMakerBrowser';
 import { cn, getItemSrc } from '@/lib/utils';
-import { MAX_IMAGE_BYTES, MAX_ITEMS, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH } from '@/lib/constants';
+import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
+import { MAX_ITEMS, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH } from '@/lib/constants';
 import { ImageIcon, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 import { SetupBackground } from '@/components/ui/SetupBackground';
@@ -17,7 +18,6 @@ import { SetupBackground } from '@/components/ui/SetupBackground';
 type LocalItem = {
   id: string;
   kind: 'upload' | 'tiermaker' | 'text';
-  dataUrl: string;   // base64 — only for kind='upload'
   imageUrl: string;  // TierMaker path — only for kind='tiermaker'
   text: string;      // tile label — only for kind='text'
   fileName: string;
@@ -271,27 +271,19 @@ export function SetupPage() {
     setSetupError(null);
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
-      await new Promise<void>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const dataUrl = e.target?.result as string;
-          if (dataUrl.length > MAX_IMAGE_BYTES) {
-            setSetupError(`"${file.name}" is too large (max ~150 KB).`);
-          } else {
-            const id = crypto.randomUUID();
-            setItems((prev) => {
-              if (Object.keys(prev).length >= MAX_ITEMS) {
-                setSetupError(`Item limit reached (max ${MAX_ITEMS}).`);
-                return prev;
-              }
-              return { ...prev, [id]: { id, kind: 'upload' as const, dataUrl, imageUrl: '', text: '', fileName: file.name } };
-            });
-            setBankItemIds((prev) => (prev.length < MAX_ITEMS ? [...prev, id] : prev));
+      try {
+        const imageId = await uploadImage(file);
+        setItems((prev) => {
+          if (Object.keys(prev).length >= MAX_ITEMS) {
+            setSetupError(`Item limit reached (max ${MAX_ITEMS}).`);
+            return prev;
           }
-          resolve();
-        };
-        reader.readAsDataURL(file);
-      });
+          return { ...prev, [imageId]: { id: imageId, kind: 'upload' as const, imageUrl: '', text: '', fileName: file.name } };
+        });
+        setBankItemIds((prev) => (prev.length < MAX_ITEMS ? [...prev, imageId] : prev));
+      } catch (err) {
+        setSetupError(err instanceof Error ? err.message : `"${file.name}" failed to upload.`);
+      }
     }
     setUploading(false);
   }
@@ -324,7 +316,7 @@ export function SetupPage() {
     for (const label of labels) {
       if (currentCount + newEntries.length >= 100) break;
       const id = crypto.randomUUID();
-      newEntries.push({ id, kind: 'text', dataUrl: '', imageUrl: '', text: label, fileName: label });
+      newEntries.push({ id, kind: 'text', imageUrl: '', text: label, fileName: label });
     }
 
     setItems((prev) => {
@@ -344,7 +336,7 @@ export function SetupPage() {
     for (const item of loaded) {
       if (currentCount + newEntries.length >= 100) break;
       const id = crypto.randomUUID();
-      newEntries.push({ id, kind: 'tiermaker', dataUrl: '', imageUrl: item.imageUrl, text: '', fileName: item.fileName });
+      newEntries.push({ id, kind: 'tiermaker', imageUrl: item.imageUrl, text: '', fileName: item.fileName });
     }
 
     setItems((prev) => {
@@ -469,6 +461,7 @@ export function SetupPage() {
                   <ImageIcon className="text-indigo-400 mx-auto mb-1" size={28} />
                   <p className="text-sm font-bold text-white/60">Drop images here</p>
                   <p className="text-xs text-white/30 mt-0.5">or use the buttons below</p>
+                  <p className="text-xs text-white/20 mt-1">{ACCEPTED_LABEL}</p>
                 </div>
 
                 <div className="flex gap-2 mt-3">
@@ -497,7 +490,7 @@ export function SetupPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={ACCEPTED_ACCEPT}
                   multiple
                   onChange={(e) => { if (e.target.files) uploadFiles(e.target.files); e.target.value = ''; }}
                   className="sr-only"

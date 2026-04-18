@@ -1,10 +1,46 @@
+interface R2Object {
+  key: string;
+  httpMetadata?: { contentType?: string };
+  customMetadata?: Record<string, string>;
+  body: ReadableStream;
+}
+
+interface R2Objects {
+  objects: R2Object[];
+  truncated: boolean;
+  cursor?: string;
+}
+
+interface R2Bucket {
+  put(
+    key: string,
+    value: ArrayBuffer,
+    opts: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
+  ): Promise<void>;
+  get(key: string): Promise<R2Object | null>;
+  delete(key: string): Promise<void>;
+  list(opts?: { limit?: number; cursor?: string; include?: string[] }): Promise<R2Objects>;
+}
+
+interface ScheduledEvent {
+  scheduledTime: number;
+  cron: string;
+}
+
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
   VITE_DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   /** Backend origin. Set in .dev.vars for local dev, Cloudflare dashboard for production. */
   BACKEND_URL: string;
+  R2_BUCKET: R2Bucket;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// 24 hours in milliseconds
+const IMAGE_TTL_MS = 24 * 60 * 60 * 1000;
+// 100 KB max after client-side preprocessing
+const MAX_UPLOAD_BYTES = 100_000;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -44,6 +80,49 @@ export default {
       }
 
       return Response.json({ access_token: data.access_token });
+    }
+
+    // Upload an image directly to R2. Returns { imageId } which becomes the item id.
+    if (request.method === 'POST' && url.pathname === '/api/image/upload') {
+      const contentType = request.headers.get('content-type') ?? '';
+      if (!contentType.startsWith('image/')) {
+        return Response.json({ error: 'Only image/* content types accepted.' }, { status: 400 });
+      }
+
+      const body = await request.arrayBuffer();
+      if (body.byteLength > MAX_UPLOAD_BYTES) {
+        return Response.json({ error: 'Image too large (max 100 KB).' }, { status: 413 });
+      }
+
+      const imageId = crypto.randomUUID();
+      const expiresAt = String(Date.now() + IMAGE_TTL_MS);
+
+      await env.R2_BUCKET.put(imageId, body, {
+        httpMetadata: { contentType },
+        customMetadata: { expiresAt },
+      });
+
+      return Response.json({ imageId });
+    }
+
+    // Serve an uploaded image from R2, proxied through the Worker for Discord CSP.
+    const imageMatch = url.pathname.match(/^\/api\/image\/([0-9a-f-]+)$/i);
+    if (imageMatch && request.method === 'GET') {
+      const id = imageMatch[1];
+      if (!UUID_RE.test(id)) {
+        return new Response(null, { status: 400 });
+      }
+
+      const obj = await env.R2_BUCKET.get(id);
+      if (!obj) return new Response(null, { status: 404 });
+
+      const contentType = obj.httpMetadata?.contentType ?? 'image/webp';
+      return new Response(obj.body, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
     }
 
     // Image proxy — handled entirely at the Worker edge, never touches Render.
@@ -107,5 +186,30 @@ export default {
 
     // All other requests: serve static SPA assets
     return env.ASSETS.fetch(request);
+  },
+
+  // Runs every 6 hours. Deletes R2 objects whose expiresAt metadata has passed.
+  async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+    const now = Date.now();
+    let cursor: string | undefined;
+
+    do {
+      const listed: R2Objects = await env.R2_BUCKET.list({
+        limit: 1000,
+        include: ['customMetadata'],
+        ...(cursor ? { cursor } : {}),
+      });
+
+      const expired = listed.objects
+        .filter((o: R2Object) => {
+          const exp = o.customMetadata?.expiresAt;
+          return exp !== undefined && Number(exp) < now;
+        })
+        .map((o: R2Object) => o.key);
+
+      await Promise.all(expired.map((key: string) => env.R2_BUCKET.delete(key)));
+
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
   },
 };

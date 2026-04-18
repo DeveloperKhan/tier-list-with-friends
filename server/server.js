@@ -31,9 +31,6 @@ const io = new Server(httpServer, {
   cors: { origin: "*" },
   pingTimeout: 60000,
   pingInterval: 25000,
-  // Default is 1 MB — START_GAME payloads can contain many base64 images
-  // (e.g. 60 items × 150 KB each ≈ 9 MB). Raise to 50 MB.
-  maxHttpBufferSize: 50 * 1024 * 1024,
 });
 
 io.on("connection", (socket) => {

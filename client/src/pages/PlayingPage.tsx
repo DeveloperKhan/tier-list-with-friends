@@ -26,6 +26,7 @@ import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
+import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
 import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS } from '@/lib/constants';
 import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
 
@@ -305,7 +306,7 @@ function BankDropZone({
       >
         {/* Controls */}
         <div className="flex flex-shrink-0 flex-col gap-1">
-          <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title="Upload images">
+          <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title={`Upload images (${ACCEPTED_LABEL})`}>
             <Upload size={13} />
           </GameButton>
           <GameButton variant="ghost" size="sm" onClick={() => setShowTextPopup(true)} title="Add text items">
@@ -314,7 +315,7 @@ function BankDropZone({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={ACCEPTED_ACCEPT}
             multiple
             className="sr-only"
             onChange={(e) => {
@@ -905,19 +906,15 @@ export function PlayingPage() {
 
   // ── Upload / template actions (any player) ─────────────────────────────
 
-  function handleUploadFiles(files: FileList) {
+  async function handleUploadFiles(files: FileList) {
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        if (dataUrl.length > 200_000) {
-          setToast(`"${file.name}" is too large (max ~150 KB).`);
-          return;
-        }
-        socket!.emit('UPLOAD_IMAGE', { dataUrl, fileName: file.name });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const imageId = await uploadImage(file);
+        socket!.emit('UPLOAD_IMAGE', { imageId, fileName: file.name });
+      } catch (err) {
+        setToast(err instanceof Error ? err.message : `"${file.name}" failed to upload.`);
+      }
     }
   }
 

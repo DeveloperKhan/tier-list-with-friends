@@ -4,10 +4,10 @@ import {
   getRoomSockets, setRoomSockets, deleteRoomSockets,
   getSocketInfo, setSocketInfo,
   getPendingDisconnect, deletePendingDisconnect,
+  getRoomTimer, setRoomTimer, deleteRoomTimer,
 } from "../store.js";
-import { put as putImage, delMany } from "../images.js";
 import { sanitizeTier, sanitizeItem } from "../lib/sanitize.js";
-import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS } from "../lib/constants.js";
+import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS, MAX_ROOM_MS } from "../lib/constants.js";
 
 function createRoom(instanceId, hostId) {
   return {
@@ -111,7 +111,6 @@ export function registerRoomHandlers(io, socket) {
 
     const sanitisedItems = {};
     const sanitisedBankIds = [];
-    const imageWrites = [];
 
     if (Array.isArray(bankItemIds) && typeof items === "object" && items !== null) {
       for (const id of bankItemIds) {
@@ -124,11 +123,8 @@ export function registerRoomHandlers(io, socket) {
 
         sanitisedItems[result.item.id] = result.item;
         sanitisedBankIds.push(result.item.id);
-        if (result.dataUrl) imageWrites.push(putImage(result.item.id, result.dataUrl));
       }
     }
-
-    await Promise.all(imageWrites);
 
     room.title = String(title ?? "").slice(0, 100);
     room.tiers = sanitisedTiers;
@@ -136,6 +132,23 @@ export function registerRoomHandlers(io, socket) {
     room.bankItemIds = sanitisedBankIds;
     room.phase = "PLAYING";
     await setRoom(info.instanceId, room);
+
+    // Hard 8-hour room lifetime — close the session before R2 images expire.
+    const instanceId = info.instanceId;
+    const existingTimer = getRoomTimer(instanceId);
+    if (existingTimer) clearTimeout(existingTimer);
+
+    const roomTimer = setTimeout(async () => {
+      deleteRoomTimer(instanceId);
+      const r = await getRoom(instanceId);
+      if (!r) return;
+      io.to(instanceId).emit("PHASE_RESET", { reason: "timeout" });
+      await deleteRoom(instanceId);
+      await deleteRoomSockets(instanceId);
+      console.log(`[room:${instanceId}] closed after ${MAX_ROOM_MS / 3600000}h max lifetime`);
+    }, MAX_ROOM_MS);
+    roomTimer.unref(); // don't keep the process alive for this alone
+    setRoomTimer(instanceId, roomTimer);
 
     io.to(info.instanceId).emit("STATE_UPDATE", room);
     console.log(`[room:${info.instanceId}] game started — ${sanitisedBankIds.length} items, ${sanitisedTiers.length} tiers`);
@@ -148,13 +161,10 @@ export function registerRoomHandlers(io, socket) {
     const room = await getRoom(info.instanceId);
     if (!room || room.hostId !== info.userId) return;
 
-    io.to(info.instanceId).emit("PHASE_RESET");
+    const timer = getRoomTimer(info.instanceId);
+    if (timer) { clearTimeout(timer); deleteRoomTimer(info.instanceId); }
 
-    // Clean up all upload images for this room.
-    const uploadIds = Object.values(room.items)
-      .filter((item) => item.kind === "upload")
-      .map((item) => item.id);
-    await delMany(uploadIds);
+    io.to(info.instanceId).emit("PHASE_RESET");
 
     await deleteRoom(info.instanceId);
     await deleteRoomSockets(info.instanceId);

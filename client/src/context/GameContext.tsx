@@ -80,8 +80,10 @@ type GameContextValue = {
   /** Set when the server rejects a lock attempt on an item */
   lockRejected: { itemId: string; lockedBy: string } | null;
   clearLockRejected: () => void;
-  /** True after the host ends the session via END_SESSION */
+  /** True after the host ends the session or the room times out */
   sessionEnded: boolean;
+  /** Non-null when sessionEnded was caused by the 8-hour room timeout */
+  sessionEndReason: string | null;
   /** Re-join the room after a session ends, starting a fresh game */
   resetSession: () => void;
   /** Live cursor positions for all other players: userId → {x, y} (0-1 normalized) */
@@ -100,6 +102,7 @@ const GameContext = createContext<GameContextValue>({
   lockRejected: null,
   clearLockRejected: () => {},
   sessionEnded: false,
+  sessionEndReason: null,
   resetSession: () => {},
   cursors: {},
   activeDuel: null,
@@ -117,6 +120,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [lockRejected, setLockRejected] = useState<{ itemId: string; lockedBy: string } | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [sessionEndReason, setSessionEndReason] = useState<string | null>(null);
   const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
   const [activeDuel, setActiveDuel] = useState<DuelResult | null>(null);
   // Stable refs so the connect handler always sees fresh values without
@@ -179,9 +183,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setLockRejected({ itemId, lockedBy });
     });
 
-    sock.on('PHASE_RESET', () => {
+    sock.on('PHASE_RESET', ({ reason }: { reason?: string } = {}) => {
       setRoomState(null);
       setSessionEnded(true);
+      setSessionEndReason(reason === 'timeout' ? 'The session was automatically closed after 8 hours.' : null);
       setCursors({});
     });
 
@@ -218,6 +223,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   function resetSession() {
     setSessionEnded(false);
+    setSessionEndReason(null);
     setRoomState(null);
     const d = discordRef.current;
     const sock = socketRef.current;
@@ -233,7 +239,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       roomState, socket, currentUserId, isHost, rejectionReason,
-      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, resetSession, cursors,
+      lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, sessionEndReason, resetSession, cursors,
       activeDuel, clearActiveDuel: () => setActiveDuel(null),
     }}>
       {children}

@@ -2,6 +2,7 @@ export const MAX_PLAYERS = 30;
 export const MAX_ITEMS = 100;
 export const MAX_IMAGE_BYTES = 200_000; // ~150 KB base64 encoded
 export const GRACE_MS = 30_000;
+export const MAX_ROOM_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 export const DEFAULT_TIERS = [
   { label: "S", color: "#FF4444" },

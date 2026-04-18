@@ -9,6 +9,7 @@ const socketInfo = new Map();  // socketId -> { instanceId, userId }
 // Pending disconnect timers are kept sync-only (NodeJS.Timeout handles aren't
 // serialisable to Redis; use a job queue there instead).
 const pendingDisconnects = new Map(); // `${instanceId}:${userId}` -> Timeout
+const roomTimers = new Map();         // instanceId -> Timeout (max-lifetime)
 
 // ---------------------------------------------------------------------------
 // Rooms
@@ -72,4 +73,20 @@ export function setPendingDisconnect(key, timer) {
 
 export function deletePendingDisconnect(key) {
   pendingDisconnects.delete(key);
+}
+
+// ---------------------------------------------------------------------------
+// Room max-lifetime timers (sync — not Redis-portable as-is)
+// ---------------------------------------------------------------------------
+
+export function getRoomTimer(instanceId) {
+  return roomTimers.get(instanceId);
+}
+
+export function setRoomTimer(instanceId, timer) {
+  roomTimers.set(instanceId, timer);
+}
+
+export function deleteRoomTimer(instanceId) {
+  roomTimers.delete(instanceId);
 }

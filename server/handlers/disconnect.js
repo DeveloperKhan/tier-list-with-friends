@@ -3,6 +3,7 @@ import {
   getRoomSockets, deleteRoomSockets,
   getSocketInfo, deleteSocketInfo,
   getPendingDisconnect, setPendingDisconnect, deletePendingDisconnect,
+  getRoomTimer, deleteRoomTimer,
 } from "../store.js";
 import { del as delImage } from "../images.js";
 import { GRACE_MS } from "../lib/constants.js";
@@ -73,12 +74,8 @@ export function registerDisconnectHandler(io, socket) {
 
       const activeSockets = await getRoomSockets(instanceId);
       if (!activeSockets || activeSockets.size === 0) {
-        // Clean up all upload images before deleting the room.
-        const uploadIds = Object.values(r.items)
-          .filter((item) => item.kind === "upload")
-          .map((item) => item.id);
-        await Promise.all(uploadIds.map(delImage));
-
+        const t = getRoomTimer(instanceId);
+        if (t) { clearTimeout(t); deleteRoomTimer(instanceId); }
         await deleteRoom(instanceId);
         await deleteRoomSockets(instanceId);
         console.log(`[room:${instanceId}] empty after grace period, deleted`);
@@ -88,6 +85,8 @@ export function registerDisconnectHandler(io, socket) {
       if (r.hostId === userId) {
         const remainingUsers = [...new Set([...activeSockets.values()])];
         if (remainingUsers.length === 0) {
+          const t = getRoomTimer(instanceId);
+          if (t) { clearTimeout(t); deleteRoomTimer(instanceId); }
           await deleteRoom(instanceId);
           await deleteRoomSockets(instanceId);
           console.log(`[room:${instanceId}] empty after grace period, deleted`);

@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
 import { getRoom, setRoom, getSocketInfo } from "../store.js";
-import { put as putImage } from "../images.js";
 import { sanitizeItem } from "../lib/sanitize.js";
-import { MAX_ITEMS, MAX_IMAGE_BYTES } from "../lib/constants.js";
+import { MAX_ITEMS } from "../lib/constants.js";
 
 export function registerItemHandlers(io, socket) {
   // ── LOCK_ITEM ─────────────────────────────────────────────────────────────
@@ -86,18 +85,14 @@ export function registerItemHandlers(io, socket) {
   });
 
   // ── UPLOAD_IMAGE (any player, PLAYING phase) ──────────────────────────────
-  socket.on("UPLOAD_IMAGE", async ({ dataUrl, fileName }) => {
+  socket.on("UPLOAD_IMAGE", async ({ imageId, fileName }) => {
     const info = await getSocketInfo(socket.id);
     if (!info) return;
     const room = await getRoom(info.instanceId);
     if (!room || room.phase !== "PLAYING") return;
 
-    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) {
-      socket.emit("UPLOAD_REJECTED", { reason: "Invalid image format." });
-      return;
-    }
-    if (dataUrl.length > MAX_IMAGE_BYTES) {
-      socket.emit("UPLOAD_REJECTED", { reason: "Image too large (max ~150 KB)." });
+    if (typeof imageId !== "string" || !/^[0-9a-f-]{36}$/i.test(imageId)) {
+      socket.emit("UPLOAD_REJECTED", { reason: "Invalid image ID." });
       return;
     }
     if (Object.keys(room.items).length >= MAX_ITEMS) {
@@ -105,11 +100,8 @@ export function registerItemHandlers(io, socket) {
       return;
     }
 
-    const id = randomUUID();
-    await putImage(id, dataUrl);
-
-    room.items[id] = {
-      id,
+    room.items[imageId] = {
+      id: imageId,
       kind: "upload",
       imageUrl: "",
       text: "",
@@ -118,7 +110,7 @@ export function registerItemHandlers(io, socket) {
       lockedBy: null,
       ownedBy: null,
     };
-    room.bankItemIds.push(id);
+    room.bankItemIds.push(imageId);
     await setRoom(info.instanceId, room);
     io.to(info.instanceId).emit("STATE_UPDATE", room);
   });
@@ -163,7 +155,6 @@ export function registerItemHandlers(io, socket) {
 
     const total = incoming.length;
     let loaded = 0;
-    const imageWrites = [];
 
     for (const rawItem of incoming) {
       if (Object.keys(room.items).length >= MAX_ITEMS) break;
@@ -173,11 +164,8 @@ export function registerItemHandlers(io, socket) {
 
       room.items[result.item.id] = result.item;
       room.bankItemIds.push(result.item.id);
-      if (result.dataUrl) imageWrites.push(putImage(result.item.id, result.dataUrl));
       loaded++;
     }
-
-    await Promise.all(imageWrites);
 
     if (loaded < total) {
       socket.emit("LOAD_TEMPLATE_PARTIAL", {

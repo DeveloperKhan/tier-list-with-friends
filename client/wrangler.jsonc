@@ -12,5 +12,15 @@
   },
   "compatibility_flags": [
     "nodejs_compat"
-  ]
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "tier-list-images",
+      "preview_bucket_name": "tier-list-images-preview"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 */6 * * *"]
+  }
 }
