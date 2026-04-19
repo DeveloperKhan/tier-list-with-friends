@@ -541,42 +541,6 @@ function EditTiersModal({
 // ExportModal
 // ---------------------------------------------------------------------------
 
-function ExportModal({ url, onClose }: { url: string; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <Panel className="flex w-full max-w-sm flex-col gap-4 p-5">
-        <div className="flex items-center justify-between">
-          <span className="font-black text-white">Export Ready</span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors text-lg leading-none">✕</button>
-        </div>
-        <p className="text-xs text-white/60">
-          Open the link below in a browser to download your tier list image.{' '}
-          <span className="font-bold text-yellow-400">This link expires in 24 hours.</span>
-        </p>
-        <div className="flex gap-1.5">
-          <input
-            readOnly
-            value={url}
-            className="game-input flex-1 py-1 text-xs"
-            onClick={(e) => (e.target as HTMLInputElement).select()}
-          />
-          <GameButton variant="primary" size="sm" onClick={handleCopy}>
-            {copied ? '✓' : 'Copy'}
-          </GameButton>
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // End Session Confirm
 // ---------------------------------------------------------------------------
@@ -683,8 +647,7 @@ export function PlayingPage() {
   const [showEditTiers, setShowEditTiers] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [exportUrl, setExportUrl] = useState<string | null>(null);
-  const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
+const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   const [showDrawBar, setShowDrawBar] = useState(true);
   const [drawingsHidden, setDrawingsHidden] = useState(false);
   const tierListRef = useRef<HTMLDivElement>(null);
@@ -1147,28 +1110,15 @@ export function PlayingPage() {
         y += h;
       }
 
-      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (isLocalDev) {
-        const a = document.createElement('a');
-        a.href = canvas.toDataURL('image/jpeg', 0.92);
-        a.download = `${roomState!.title || 'tier-list'}.jpg`;
-        a.click();
-      } else {
-        const blob = await new Promise<Blob>((resolve, reject) =>
-          canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', 0.92),
-        );
-        const res = await fetch('/api/export/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'image/jpeg' },
-          body: blob,
-        });
-        if (!res.ok) {
-          const { error } = await res.json() as { error?: string };
-          throw new Error(error ?? 'Upload failed');
-        }
-        const { exportId } = await res.json() as { exportId: string };
-        setExportUrl(`${window.location.origin}/api/export/${exportId}`);
-      }
+      const blob = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', 0.92),
+      );
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${roomState!.title || 'tier-list'}.jpg`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
     } catch (err) {
       console.error('[export]', err);
       setToast('Export failed. Please try again.');
@@ -1456,11 +1406,7 @@ export function PlayingPage() {
         />
       )}
 
-      {exportUrl && (
-        <ExportModal url={exportUrl} onClose={() => setExportUrl(null)} />
-      )}
-
-      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
       {activeDuel && (activeDuel.challengerId === currentUserId || activeDuel.ownerId === currentUserId) && (
         <DuelCutscene
