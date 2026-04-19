@@ -10,6 +10,7 @@ const socketInfo = new Map();  // socketId -> { instanceId, userId }
 // serialisable to Redis; use a job queue there instead).
 const pendingDisconnects = new Map(); // `${instanceId}:${userId}` -> Timeout
 const roomTimers = new Map();         // instanceId -> Timeout (max-lifetime)
+const reconcileTimers = new Map();    // instanceId -> Interval (periodic reconciliation)
 
 // ---------------------------------------------------------------------------
 // Rooms
@@ -89,4 +90,20 @@ export function setRoomTimer(instanceId, timer) {
 
 export function deleteRoomTimer(instanceId) {
   roomTimers.delete(instanceId);
+}
+
+// ---------------------------------------------------------------------------
+// Periodic reconciliation intervals (sync — not Redis-portable as-is)
+// ---------------------------------------------------------------------------
+
+export function getReconcileTimer(instanceId) {
+  return reconcileTimers.get(instanceId);
+}
+
+export function setReconcileTimer(instanceId, interval) {
+  reconcileTimers.set(instanceId, interval);
+}
+
+export function deleteReconcileTimer(instanceId) {
+  reconcileTimers.delete(instanceId);
 }

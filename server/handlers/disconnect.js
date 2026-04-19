@@ -4,6 +4,7 @@ import {
   getSocketInfo, deleteSocketInfo,
   getPendingDisconnect, setPendingDisconnect, deletePendingDisconnect,
   getRoomTimer, deleteRoomTimer,
+  getReconcileTimer, deleteReconcileTimer,
 } from "../store.js";
 import { del as delImage } from "../images.js";
 import { GRACE_MS } from "../lib/constants.js";
@@ -32,7 +33,7 @@ export function registerDisconnectHandler(io, socket) {
 
     // Release any active drag lock immediately so other players aren't blocked
     // for the entire grace period. Owned placements stay in place.
-    let lockReleased = false;
+    const movedItems = [];
     for (const item of Object.values(room.items)) {
       if (item.lockedBy === userId) {
         item.lockedBy = null;
@@ -43,12 +44,15 @@ export function registerDisconnectHandler(io, socket) {
         if (!room.bankItemIds.includes(item.id)) {
           room.bankItemIds.push(item.id);
         }
-        lockReleased = true;
+        movedItems.push({ itemId: item.id, index: room.bankItemIds.indexOf(item.id) });
       }
     }
-    if (lockReleased) {
+    if (movedItems.length > 0) {
       await setRoom(instanceId, room);
-      io.to(instanceId).emit("STATE_UPDATE", room);
+      // Use targeted events instead of full STATE_UPDATE to save bandwidth.
+      for (const { itemId, index } of movedItems) {
+        io.to(instanceId).emit("ITEM_MOVED", { itemId, tierId: null, index, ownedBy: null });
+      }
     }
 
     // Grace period: give the user 30 s to reconnect before evicting.
@@ -76,6 +80,8 @@ export function registerDisconnectHandler(io, socket) {
       if (!activeSockets || activeSockets.size === 0) {
         const t = getRoomTimer(instanceId);
         if (t) { clearTimeout(t); deleteRoomTimer(instanceId); }
+        const rc = getReconcileTimer(instanceId);
+        if (rc) { clearInterval(rc); deleteReconcileTimer(instanceId); }
         await deleteRoom(instanceId);
         await deleteRoomSockets(instanceId);
         console.log(`[room:${instanceId}] empty after grace period, deleted`);

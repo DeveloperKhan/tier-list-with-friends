@@ -24,7 +24,8 @@ export function registerItemHandlers(io, socket) {
 
     item.lockedBy = info.userId;
     await setRoom(info.instanceId, room);
-    io.to(info.instanceId).emit("STATE_UPDATE", room);
+    // Send only the changed lock field — not the full room state.
+    io.to(info.instanceId).emit("ITEM_LOCK_CHANGED", { itemId, lockedBy: info.userId });
   });
 
   // ── UNLOCK_ITEM ───────────────────────────────────────────────────────────
@@ -39,7 +40,8 @@ export function registerItemHandlers(io, socket) {
 
     if (item.lockedBy === info.userId) item.lockedBy = null;
     await setRoom(info.instanceId, room);
-    io.to(info.instanceId).emit("STATE_UPDATE", room);
+    // Send only the changed lock field — not the full room state.
+    io.to(info.instanceId).emit("ITEM_LOCK_CHANGED", { itemId, lockedBy: null });
   });
 
   // ── MOVE_ITEM ─────────────────────────────────────────────────────────────
@@ -57,6 +59,9 @@ export function registerItemHandlers(io, socket) {
       tier.itemIds = tier.itemIds.filter((id) => id !== itemId);
     }
 
+    let placedTierId = null;
+    let placedIndex = null;
+
     if (destination?.type === "tier") {
       const tier = room.tiers.find((t) => t.id === destination.tierId);
       if (!tier) {
@@ -69,6 +74,8 @@ export function registerItemHandlers(io, socket) {
             : tier.itemIds.length;
         tier.itemIds.splice(idx, 0, itemId);
         item.ownedBy = info.userId;
+        placedTierId = tier.id;
+        placedIndex = idx;
       }
     } else {
       const idx =
@@ -77,11 +84,18 @@ export function registerItemHandlers(io, socket) {
           : room.bankItemIds.length;
       room.bankItemIds.splice(idx, 0, itemId);
       item.ownedBy = null;
+      placedIndex = idx;
     }
 
     item.lockedBy = null;
     await setRoom(info.instanceId, room);
-    io.to(info.instanceId).emit("STATE_UPDATE", room);
+    // Send only placement delta — not the full room state.
+    io.to(info.instanceId).emit("ITEM_MOVED", {
+      itemId,
+      tierId: placedTierId,      // null means moved to bank
+      index: placedIndex,
+      ownedBy: item.ownedBy,
+    });
   });
 
   // ── UPLOAD_IMAGE (any player, PLAYING phase) ──────────────────────────────

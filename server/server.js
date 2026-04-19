@@ -4,6 +4,7 @@ dotenv.config({ path: new URL('../.env', import.meta.url) });
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import * as msgpackParser from "socket.io-msgpack-parser";
 
 import tokenRouter from "./routes/token.js";
 import tiermakerRouter from "./routes/tiermaker.js";
@@ -31,6 +32,8 @@ const io = new Server(httpServer, {
   cors: { origin: "*" },
   pingTimeout: 60000,
   pingInterval: 25000,
+  perMessageDeflate: false,
+  parser: msgpackParser,
 });
 
 io.on("connection", (socket) => {

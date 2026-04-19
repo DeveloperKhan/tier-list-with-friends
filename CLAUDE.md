@@ -10,7 +10,7 @@ A live, collaborative tier list builder Discord activity. Multiple Discord users
 | Styling | Tailwind CSS v3 + `clsx`/`tailwind-merge` |
 | Discord | `@discord/embedded-app-sdk` ^1.4.2 |
 | Backend | Express (Node.js) — token exchange + WebSocket hub |
-| Realtime | Socket.IO (to be added) |
+| Realtime | Socket.IO 4 + `socket.io-msgpack-parser` |
 | Tunnel | `cloudflared` for local development |
 
 ## Project Structure
@@ -375,6 +375,59 @@ cd client && npm install socket.io-client @dnd-kit/core @dnd-kit/sortable @dnd-k
 ```bash
 cd server && npm install socket.io
 ```
+
+## WebSocket Bandwidth Rules
+
+> **Skill:** The `bandwidth-audit` Claude skill enforces these patterns automatically. It triggers whenever you add or modify socket event handlers, cursor tracking, draw strokes, or any `io.to().emit()` call.
+
+A 2-hour 9-player session produced 400 MB of outbound traffic before these rules were established. Follow them for every new real-time feature.
+
+### Rule 1 — Never broadcast full STATE_UPDATE for high-frequency events
+
+`STATE_UPDATE` sends the entire room (items, tiers, participants). Only emit it for **structural changes**: join/leave, phase transitions, tier edits, new items, template loads, and the 30-second reconciliation heartbeat.
+
+For frequent per-item changes, emit a **targeted delta**:
+
+| Event | Payload | Instead of |
+|-------|---------|------------|
+| `ITEM_LOCK_CHANGED` | `{ itemId, lockedBy }` | STATE_UPDATE on every drag-start |
+| `ITEM_MOVED` | `{ itemId, tierId, index, ownedBy }` | STATE_UPDATE on every drag-end |
+
+Client handlers in `GameContext.tsx` must use `setRoomState(prev => ...)` (functional update) — never replace state wholesale from a delta.
+
+### Rule 2 — Cursor moves only during active interactions
+
+The general `window.mousemove` listener does not exist. Do not add it. `CURSOR_MOVE` is emitted from exactly three places:
+
+- `handleCanvasPointerMove` in `PlayingPage.tsx` — piggybacked on the 30 fps draw stroke cap
+- `handleDragMove` (dnd-kit `onDragMove`) — 20 fps cap + 4 px dead zone
+- `handleCanvasPointerDown` when `drawTool === 'confetti'` — once per click
+
+### Rule 3 — Binary encoding for high-frequency small payloads
+
+Cursor updates use a 3-byte `Buffer([playerIndex, x_uint8, y_uint8])`. Each participant has a stable `index: number` (uint8) assigned at `JOIN_ROOM` and stored in `room.participants[userId].index`. `playerIndexRef` in `GameContext.tsx` maps index → userId.
+
+Only apply binary encoding to events firing **>1/sec per player**. Everything else goes through msgpack automatically.
+
+### Rule 4 — msgpack parser on both sides, perMessageDeflate off
+
+```js
+// server/server.js — already configured
+import * as msgpackParser from "socket.io-msgpack-parser";
+new Server(httpServer, { parser: msgpackParser, perMessageDeflate: false, ... });
+```
+
+```ts
+// client/src/context/GameContext.tsx — already configured
+import * as msgpackParser from 'socket.io-msgpack-parser';
+io(url, { parser: msgpackParser, ... });
+```
+
+Both sides **must** use the same parser. `perMessageDeflate: false` is intentional — compression is counterproductive for small high-frequency payloads.
+
+### Rule 5 — Draw stroke gap prevention
+
+Use `lastEmittedStrokePointRef` (not `lastPointRef`) as the origin of each emitted stroke. This covers the full accumulated distance since the last emit and prevents gaps on remote canvases.
 
 ## Key Constraints
 

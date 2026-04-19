@@ -13,6 +13,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 
@@ -701,6 +702,11 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   const confettiAnimatingRef = useRef(false);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastStrokeEmitRef = useRef(0);
+  const lastEmittedStrokePointRef = useRef<{ x: number; y: number } | null>(null);
+  const dragStartClientRef = useRef<{ x: number; y: number } | null>(null);
+  const lastDragCursorEmitRef = useRef(0);
+  const lastCursorPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const drawColor = useMemo(() => {
     const palette = ['#FF4444', '#FF8C00', '#FFD700', '#32CD32', '#1E90FF', '#9932CC', '#FF69B4', '#00CED1', '#FF6B35', '#4ECDC4'];
@@ -824,6 +830,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       const ny = (e.clientY - rect.top) / canvas.height;
       spawnConfettiBurst(confettiCanvasRef, confettiParticlesRef, confettiAnimatingRef, nx, ny);
       socket!.emit('CONFETTI_BURST', { x: nx, y: ny });
+      socket!.emit('CURSOR_MOVE', { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
       return;
     }
     if (drawTool !== 'pen') return;
@@ -831,6 +838,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
     if (!pt) return;
     isDrawingRef.current = true;
     lastPointRef.current = pt;
+    lastEmittedStrokePointRef.current = pt;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -858,11 +866,18 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
-      socket!.emit('DRAW_STROKE', {
-        x0: lastPointRef.current.x / canvas.width, y0: lastPointRef.current.y / canvas.height,
-        x1: pt.x / canvas.width, y1: pt.y / canvas.height,
-        color: drawColor,
-      });
+      const now = Date.now();
+      if (now - lastStrokeEmitRef.current >= 33) { // ~30 fps cap
+        lastStrokeEmitRef.current = now;
+        const origin = lastEmittedStrokePointRef.current ?? lastPointRef.current;
+        lastEmittedStrokePointRef.current = pt;
+        socket!.emit('DRAW_STROKE', {
+          x0: origin.x / canvas.width, y0: origin.y / canvas.height,
+          x1: pt.x / canvas.width, y1: pt.y / canvas.height,
+          color: drawColor,
+        });
+        socket!.emit('CURSOR_MOVE', { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
+      }
     }
     lastPointRef.current = pt;
   }
@@ -886,6 +901,22 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
     if (!item) return;
     setActiveItem(item);
     socket!.emit('LOCK_ITEM', { itemId: event.active.id });
+    const e = event.activatorEvent as PointerEvent;
+    dragStartClientRef.current = { x: e.clientX, y: e.clientY };
+    lastCursorPosRef.current = null;
+  }
+
+  function handleDragMove(event: DragMoveEvent) {
+    if (!dragStartClientRef.current) return;
+    const now = Date.now();
+    if (now - lastDragCursorEmitRef.current < 50) return; // 20 fps cap
+    const cx = dragStartClientRef.current.x + event.delta.x;
+    const cy = dragStartClientRef.current.y + event.delta.y;
+    const last = lastCursorPosRef.current;
+    if (last && Math.abs(cx - last.x) < 4 && Math.abs(cy - last.y) < 4) return; // dead zone
+    lastDragCursorEmitRef.current = now;
+    lastCursorPosRef.current = { x: cx, y: cy };
+    socket!.emit('CURSOR_MOVE', { x: cx / window.innerWidth, y: cy / window.innerHeight });
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -1209,6 +1240,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
         sensors={sensors}
         collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >

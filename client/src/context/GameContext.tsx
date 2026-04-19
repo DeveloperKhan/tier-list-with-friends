@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import * as msgpackParser from 'socket.io-msgpack-parser';
 import { useDiscord } from './DiscordContext';
 
 // ---------------------------------------------------------------------------
@@ -16,6 +17,7 @@ export type Participant = {
   userId: string;
   username: string;
   avatar: string | null;
+  index: number;
 };
 
 export type ImageItem = {
@@ -68,7 +70,7 @@ export type DuelResult = {
 // Context value
 // ---------------------------------------------------------------------------
 
-export type CursorPosition = { x: number; y: number };
+export type CursorPosition = { x: number; y: number; lastSeen: number };
 
 type GameContextValue = {
   roomState: RoomState | null;
@@ -128,6 +130,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const discordRef = useRef(discord);
   discordRef.current = discord;
   const socketRef = useRef<Socket | null>(null);
+  // Maps participant.index (uint8) → userId for binary cursor decoding.
+  // Updated whenever STATE_UPDATE arrives.
+  const playerIndexRef = useRef<Record<number, string>>({});
 
   useEffect(() => {
     if (discord.status !== 'ready') return;
@@ -146,6 +151,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // The Worker now returns the upstream fetch directly for /ws/* so the
       // 101 handshake is preserved and the upgrade succeeds in production.
       transports: ['websocket', 'polling'],
+      parser: msgpackParser,
     });
 
     // Emitted on initial connect AND every auto-reconnect. The server
@@ -164,6 +170,70 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     sock.on('STATE_UPDATE', (state: RoomState) => {
       setRoomState(state);
+      const map: Record<number, string> = {};
+      for (const p of Object.values(state.participants)) map[p.index] = p.userId;
+      playerIndexRef.current = map;
+    });
+
+    sock.on('ITEM_LOCK_CHANGED', ({ itemId, lockedBy }: { itemId: string; lockedBy: string | null }) => {
+      setRoomState((prev) => {
+        if (!prev || !prev.items[itemId]) return prev;
+        return {
+          ...prev,
+          items: {
+            ...prev.items,
+            [itemId]: { ...prev.items[itemId], lockedBy },
+          },
+        };
+      });
+    });
+
+    sock.on('ITEM_MOVED', ({ itemId, tierId, index, ownedBy }: {
+      itemId: string;
+      tierId: string | null;
+      index: number | null;
+      ownedBy: string | null;
+    }) => {
+      setRoomState((prev) => {
+        if (!prev || !prev.items[itemId]) return prev;
+
+        // Remove item from its current location
+        const newBankItemIds = prev.bankItemIds.filter((id) => id !== itemId);
+        const newTiers = prev.tiers.map((t) => ({
+          ...t,
+          itemIds: t.itemIds.filter((id) => id !== itemId),
+        }));
+
+        if (tierId !== null) {
+          // Place into a tier
+          const tierIdx = newTiers.findIndex((t) => t.id === tierId);
+          if (tierIdx !== -1) {
+            const insertAt = index ?? newTiers[tierIdx].itemIds.length;
+            newTiers[tierIdx] = {
+              ...newTiers[tierIdx],
+              itemIds: [
+                ...newTiers[tierIdx].itemIds.slice(0, insertAt),
+                itemId,
+                ...newTiers[tierIdx].itemIds.slice(insertAt),
+              ],
+            };
+          }
+        } else {
+          // Place into bank
+          const insertAt = index ?? newBankItemIds.length;
+          newBankItemIds.splice(insertAt, 0, itemId);
+        }
+
+        return {
+          ...prev,
+          tiers: newTiers,
+          bankItemIds: newBankItemIds,
+          items: {
+            ...prev.items,
+            [itemId]: { ...prev.items[itemId], lockedBy: null, ownedBy },
+          },
+        };
+      });
     });
 
     sock.on('CONNECTION_REJECTED', ({ reason }: { reason: string }) => {
@@ -189,8 +259,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setCursors({});
     });
 
-    sock.on('CURSOR_UPDATE', ({ userId, x, y }: { userId: string; x: number; y: number }) => {
-      setCursors((prev) => ({ ...prev, [userId]: { x, y } }));
+    sock.on('CURSOR_UPDATE', (buf: ArrayBuffer) => {
+      const view = new DataView(buf instanceof ArrayBuffer ? buf : (buf as { buffer: ArrayBuffer }).buffer);
+      const userId = playerIndexRef.current[view.getUint8(0)];
+      if (!userId) return;
+      const x = view.getUint8(1) / 255;
+      const y = view.getUint8(2) / 255;
+      setCursors((prev) => ({ ...prev, [userId]: { x, y, lastSeen: Date.now() } }));
     });
 
     sock.on('DUEL_RESULT', (result: DuelResult) => {

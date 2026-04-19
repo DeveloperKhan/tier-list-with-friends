@@ -5,6 +5,7 @@ import {
   getSocketInfo, setSocketInfo,
   getPendingDisconnect, deletePendingDisconnect,
   getRoomTimer, setRoomTimer, deleteRoomTimer,
+  getReconcileTimer, setReconcileTimer, deleteReconcileTimer,
 } from "../store.js";
 import { sanitizeTier, sanitizeItem } from "../lib/sanitize.js";
 import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS, MAX_ROOM_MS } from "../lib/constants.js";
@@ -20,6 +21,7 @@ function createRoom(instanceId, hostId) {
     bankItemIds: [],
     participants: {},
     failedDuels: {},
+    nextParticipantIndex: 0,
   };
 }
 
@@ -59,9 +61,13 @@ export function registerRoomHandlers(io, socket) {
     socket.join(instanceId);
 
     room.participants[userId] = {
+      ...(isReturningUser ? room.participants[userId] : {}),
       userId,
       username: String(username ?? "Unknown").slice(0, 32),
       avatar: avatar ?? null,
+      index: isReturningUser
+        ? room.participants[userId].index
+        : room.nextParticipantIndex++,
     };
     await setRoom(instanceId, room);
 
@@ -140,6 +146,8 @@ export function registerRoomHandlers(io, socket) {
 
     const roomTimer = setTimeout(async () => {
       deleteRoomTimer(instanceId);
+      const reconcile = getReconcileTimer(instanceId);
+      if (reconcile) { clearInterval(reconcile); deleteReconcileTimer(instanceId); }
       const r = await getRoom(instanceId);
       if (!r) return;
       io.to(instanceId).emit("PHASE_RESET", { reason: "timeout" });
@@ -147,8 +155,20 @@ export function registerRoomHandlers(io, socket) {
       await deleteRoomSockets(instanceId);
       console.log(`[room:${instanceId}] closed after ${MAX_ROOM_MS / 3600000}h max lifetime`);
     }, MAX_ROOM_MS);
-    roomTimer.unref(); // don't keep the process alive for this alone
+    roomTimer.unref();
     setRoomTimer(instanceId, roomTimer);
+
+    // Broadcast full state every 30 s so any client whose delta-derived state
+    // has drifted (e.g. due to a handler bug) is silently corrected.
+    const existingReconcile = getReconcileTimer(instanceId);
+    if (existingReconcile) clearInterval(existingReconcile);
+    const reconcileInterval = setInterval(async () => {
+      const r = await getRoom(instanceId);
+      if (!r) return;
+      io.to(instanceId).emit("STATE_UPDATE", r);
+    }, 30_000);
+    reconcileInterval.unref();
+    setReconcileTimer(instanceId, reconcileInterval);
 
     io.to(info.instanceId).emit("STATE_UPDATE", room);
     console.log(`[room:${info.instanceId}] game started — ${sanitisedBankIds.length} items, ${sanitisedTiers.length} tiers`);
@@ -163,6 +183,9 @@ export function registerRoomHandlers(io, socket) {
 
     const timer = getRoomTimer(info.instanceId);
     if (timer) { clearTimeout(timer); deleteRoomTimer(info.instanceId); }
+
+    const reconcile = getReconcileTimer(info.instanceId);
+    if (reconcile) { clearInterval(reconcile); deleteReconcileTimer(info.instanceId); }
 
     io.to(info.instanceId).emit("PHASE_RESET");
 
