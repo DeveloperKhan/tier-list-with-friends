@@ -1180,7 +1180,7 @@ export function PlayingPage() {
           />
 
           {/* Header */}
-          <header className="flex flex-none items-center justify-between gap-3 border-b border-white/10 bg-game-bg/80 px-4 py-2 backdrop-blur-sm">
+          <header style={{ zIndex: Z.header }} className="relative flex flex-none items-center justify-between gap-3 border-b border-white/10 bg-game-bg/80 px-4 py-2 backdrop-blur-sm">
             <h1 className="min-w-0 truncate text-base font-black text-white">
               {roomState.title || 'Tier List'}
             </h1>

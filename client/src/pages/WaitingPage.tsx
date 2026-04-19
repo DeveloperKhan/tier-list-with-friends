@@ -31,8 +31,11 @@ export function WaitingPage() {
   return (
     <div className="relative flex h-full flex-col bg-game-bg overflow-hidden">
       <SetupBackground />
-      {/* Decorative gradient top strip */}
-      <div className="h-1 w-full bg-gradient-to-r from-game-pink via-game-purple to-game-cyan flex-none" />
+      {/* Decorative gradient top strip — height accounts for mobile safe-area-inset-top */}
+      <div
+        className="w-full bg-gradient-to-r from-game-pink via-game-purple to-game-cyan flex-none"
+        style={{ height: 'calc(4px + env(safe-area-inset-top))' }}
+      />
 
       {/* Header */}
       <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm">

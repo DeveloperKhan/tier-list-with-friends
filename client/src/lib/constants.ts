@@ -3,6 +3,7 @@ export const Z = {
   canvasBase:      10,   // doodle drawing canvas
   canvasConfetti:  11,   // confetti animation canvas
   drawToolbar:     20,   // drawing tool palette (inside tier list container)
+  header:          30,   // page header — must exceed drawToolbar so dropdowns clear the tier list
   cursors:         40,   // other players' cursors
   duelCutscene:    90,   // duel result overlay (below modals so modals can dismiss it)
   modal:          100,   // all popups, drawers, and toasts
