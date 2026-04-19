@@ -1156,14 +1156,17 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       const blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', 0.92),
       );
-      const form = new FormData();
-      form.append('key', import.meta.env.VITE_IMGBB_API_KEY as string);
-      form.append('name', roomState!.title || 'tier-list');
-      form.append('image', new File([blob], 'export.jpg', { type: 'image/jpeg' }));
-      const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: form });
-      if (!res.ok) throw new Error(`imgbb ${res.status}`);
-      const { data } = await res.json() as { data: { url: string } };
-      setExportUrl(data.url);
+      const res = await fetch('/api/export/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob,
+      });
+      if (!res.ok) {
+        const { error } = await res.json() as { error?: string };
+        throw new Error(error ?? 'Upload failed');
+      }
+      const { url } = await res.json() as { url: string };
+      setExportUrl(url);
     } catch (err) {
       console.error('[export]', err);
       setToast('Export failed. Please try again.');

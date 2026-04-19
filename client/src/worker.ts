@@ -34,6 +34,7 @@ interface Env {
   /** Backend origin. Set in .dev.vars for local dev, Cloudflare dashboard for production. */
   BACKEND_URL: string;
   R2_BUCKET: R2Bucket;
+  VITE_IMGBB_API_KEY: string;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -127,39 +128,23 @@ export default {
       });
     }
 
-    // Upload a tier-list export render to R2. Returns { exportId }.
-    // Stored under the "exports/" prefix; the same 24-hour CRON cleanup applies.
+    // Proxy a tier-list export to imgbb and return the public URL.
+    // The Worker makes the outbound request so the client isn't blocked by CSP.
     if (request.method === 'POST' && url.pathname === '/api/export/upload') {
-      const contentType = request.headers.get('content-type') ?? '';
-      if (!contentType.startsWith('image/')) {
-        return Response.json({ error: 'Only image/* content types accepted.' }, { status: 400 });
-      }
       const body = await request.arrayBuffer();
       if (body.byteLength > MAX_EXPORT_BYTES) {
         return Response.json({ error: 'Export image too large (max 5 MB).' }, { status: 413 });
       }
-      const exportId = crypto.randomUUID();
-      await env.R2_BUCKET.put(`exports/${exportId}`, body, {
-        httpMetadata: { contentType },
-        customMetadata: { expiresAt: String(Date.now() + IMAGE_TTL_MS) },
-      });
-      return Response.json({ exportId });
-    }
-
-    // Serve a tier-list export from R2.
-    const exportMatch = url.pathname.match(/^\/api\/export\/([0-9a-f-]+)$/i);
-    if (exportMatch && request.method === 'GET') {
-      const id = exportMatch[1];
-      if (!UUID_RE.test(id)) return new Response(null, { status: 400 });
-      const obj = await env.R2_BUCKET.get(`exports/${id}`);
-      if (!obj) return new Response(null, { status: 404 });
-      return new Response(obj.body, {
-        headers: {
-          'Content-Type': obj.httpMetadata?.contentType ?? 'image/jpeg',
-          'Cache-Control': 'public, max-age=3600',
-          'Content-Disposition': 'attachment; filename="tier-list.jpg"',
-        },
-      });
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(body)));
+      const form = new FormData();
+      form.append('key', env.VITE_IMGBB_API_KEY);
+      form.append('image', b64);
+      const imgbbRes = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: form });
+      const data = await imgbbRes.json() as { success: boolean; data?: { url: string } };
+      if (!imgbbRes.ok || !data.success) {
+        return Response.json({ error: 'Image host upload failed.' }, { status: 502 });
+      }
+      return Response.json({ url: data.data!.url });
     }
 
     // Image proxy — handled entirely at the Worker edge, never touches Render.
