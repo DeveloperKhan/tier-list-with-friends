@@ -61,6 +61,7 @@ function DraggableItem({
   participants,
   isDragOverlay = false,
   isBank = false,
+  isRejected = false,
   votes = { up: [], down: [] },
   onVoteUp,
   onVoteDown,
@@ -70,6 +71,7 @@ function DraggableItem({
   participants: Record<string, Participant>;
   isDragOverlay?: boolean;
   isBank?: boolean;
+  isRejected?: boolean;
   votes?: { up: string[]; down: string[] };
   onVoteUp?: () => void;
   onVoteDown?: () => void;
@@ -106,6 +108,7 @@ function DraggableItem({
         isOwnedByOther && 'cursor-not-allowed',
         isDragging && !isDragOverlay && 'opacity-0',
         isDragOverlay && 'scale-105 cursor-grabbing shadow-2xl',
+        isRejected && 'animate-item-reject',
       )}
     >
       {/* Image — always a fixed 56×56 square at the top */}
@@ -211,6 +214,7 @@ function TierDropZone({
   currentUserId,
   participants,
   votes,
+  rejectedItemIds,
   onVote,
 }: {
   tier: Tier;
@@ -218,6 +222,7 @@ function TierDropZone({
   currentUserId: string;
   participants: Record<string, Participant>;
   votes: Record<string, { up: string[]; down: string[] }>;
+  rejectedItemIds: Set<string>;
   onVote: (itemId: string, vote: 'up' | 'down') => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: tier.id });
@@ -239,6 +244,7 @@ function TierDropZone({
               item={item}
               currentUserId={currentUserId}
               participants={participants}
+              isRejected={rejectedItemIds.has(id)}
               votes={votes[id] ?? { up: [], down: [] }}
               onVoteUp={() => onVote(id, 'up')}
               onVoteDown={() => onVote(id, 'down')}
@@ -712,7 +718,7 @@ function spawnConfettiBurst(
 // ---------------------------------------------------------------------------
 
 export function PlayingPage() {
-  const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected, activeDuel, clearActiveDuel } = useGame();
+  const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected, activeDuel, clearActiveDuel, rejectedItemIds } = useGame();
   const discord = useDiscord();
   const [activeItem, setActiveItem] = useState<ImageItem | null>(null);
   const [showEditTiers, setShowEditTiers] = useState(false);
@@ -1418,6 +1424,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                     currentUserId={currentUserId}
                     participants={roomState.participants}
                     votes={roomState.votes ?? {}}
+                    rejectedItemIds={rejectedItemIds}
                     onVote={(itemId, vote) => socket?.emit('VOTE_ITEM', { itemId, vote })}
                   />
                 </div>

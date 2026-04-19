@@ -76,6 +76,14 @@ export function registerItemHandlers(io, socket) {
         item.ownedBy = info.userId;
         placedTierId = tier.id;
         placedIndex = idx;
+
+        // Auto-upvote by the placer (score starts at +1)
+        if (!room.votes) room.votes = {};
+        if (!room.votes[itemId]) room.votes[itemId] = { up: [], down: [] };
+        const iv = room.votes[itemId];
+        const downIdx = iv.down.indexOf(info.userId);
+        if (downIdx !== -1) iv.down.splice(downIdx, 1);
+        if (!iv.up.includes(info.userId)) iv.up.push(info.userId);
       }
     } else {
       const idx =
@@ -91,13 +99,16 @@ export function registerItemHandlers(io, socket) {
 
     item.lockedBy = null;
     await setRoom(info.instanceId, room);
-    // Send only placement delta — not the full room state.
     io.to(info.instanceId).emit("ITEM_MOVED", {
       itemId,
-      tierId: placedTierId,      // null means moved to bank
+      tierId: placedTierId,
       index: placedIndex,
       ownedBy: item.ownedBy,
     });
+    // Broadcast the auto-upvote so all clients reflect the new score
+    if (placedTierId !== null && room.votes?.[itemId]) {
+      io.to(info.instanceId).emit("VOTE_CHANGED", { itemId, votes: room.votes[itemId] });
+    }
   });
 
   // ── UPLOAD_IMAGE (any player, PLAYING phase) ──────────────────────────────

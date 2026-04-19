@@ -29,6 +29,22 @@
   }
 }
 
+@keyframes item-reject {
+  0%   { transform: translateX(0)    rotate(0deg);   opacity: 1; }
+  12%  { transform: translateX(-8px) rotate(-5deg);  opacity: 1; }
+  25%  { transform: translateX(8px)  rotate(5deg);   opacity: 1; }
+  37%  { transform: translateX(-6px) rotate(-3deg);  opacity: 1; }
+  50%  { transform: translateX(5px)  rotate(3deg);   opacity: 1; }
+  62%  { transform: translateX(0)    rotate(0deg);   opacity: 1; }
+  100% { transform: translateY(50px) rotate(0deg);   opacity: 0; }
+}
+
+.animate-item-reject {
+  animation: item-reject 0.7s ease-in forwards;
+  pointer-events: none !important;
+  z-index: 50;
+}
+
 @keyframes sq-float {
   0%   { transform: translateY(0)       rotate(0deg);   opacity: var(--sq-opacity); }
   50%  {                                                 opacity: calc(var(--sq-opacity) * 0.5); }

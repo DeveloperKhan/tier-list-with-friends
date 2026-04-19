@@ -94,6 +94,8 @@ type GameContextValue = {
   /** Active duel result waiting to be animated, null when idle */
   activeDuel: DuelResult | null;
   clearActiveDuel: () => void;
+  /** Items currently playing the rejection (shake+fall) animation before moving to bank */
+  rejectedItemIds: Set<string>;
 };
 
 const GameContext = createContext<GameContextValue>({
@@ -110,6 +112,7 @@ const GameContext = createContext<GameContextValue>({
   cursors: {},
   activeDuel: null,
   clearActiveDuel: () => {},
+  rejectedItemIds: new Set<string>(),
 });
 
 // ---------------------------------------------------------------------------
@@ -126,6 +129,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [sessionEndReason, setSessionEndReason] = useState<string | null>(null);
   const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
   const [activeDuel, setActiveDuel] = useState<DuelResult | null>(null);
+  const [rejectedItemIds, setRejectedItemIds] = useState<Set<string>>(new Set());
+  const pendingRejectionsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Stable refs so the connect handler always sees fresh values without
   // needing to be re-registered (avoids stale closures on reconnect).
   const discordRef = useRef(discord);
@@ -189,57 +194,69 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
-    sock.on('ITEM_MOVED', ({ itemId, tierId, index, ownedBy }: {
+    sock.on('ITEM_MOVED', ({ itemId, tierId, index, ownedBy, wasRejected }: {
       itemId: string;
       tierId: string | null;
       index: number | null;
       ownedBy: string | null;
+      wasRejected?: boolean;
     }) => {
-      setRoomState((prev) => {
-        if (!prev || !prev.items[itemId]) return prev;
+      const applyMove = () => {
+        setRoomState((prev) => {
+          if (!prev || !prev.items[itemId]) return prev;
 
-        // Remove item from its current location
-        const newBankItemIds = prev.bankItemIds.filter((id) => id !== itemId);
-        const newTiers = prev.tiers.map((t) => ({
-          ...t,
-          itemIds: t.itemIds.filter((id) => id !== itemId),
-        }));
+          const newBankItemIds = prev.bankItemIds.filter((id) => id !== itemId);
+          const newTiers = prev.tiers.map((t) => ({
+            ...t,
+            itemIds: t.itemIds.filter((id) => id !== itemId),
+          }));
 
-        if (tierId !== null) {
-          // Place into a tier
-          const tierIdx = newTiers.findIndex((t) => t.id === tierId);
-          if (tierIdx !== -1) {
-            const insertAt = index ?? newTiers[tierIdx].itemIds.length;
-            newTiers[tierIdx] = {
-              ...newTiers[tierIdx],
-              itemIds: [
-                ...newTiers[tierIdx].itemIds.slice(0, insertAt),
-                itemId,
-                ...newTiers[tierIdx].itemIds.slice(insertAt),
-              ],
-            };
+          if (tierId !== null) {
+            const tierIdx = newTiers.findIndex((t) => t.id === tierId);
+            if (tierIdx !== -1) {
+              const insertAt = index ?? newTiers[tierIdx].itemIds.length;
+              newTiers[tierIdx] = {
+                ...newTiers[tierIdx],
+                itemIds: [
+                  ...newTiers[tierIdx].itemIds.slice(0, insertAt),
+                  itemId,
+                  ...newTiers[tierIdx].itemIds.slice(insertAt),
+                ],
+              };
+            }
+          } else {
+            const insertAt = index ?? newBankItemIds.length;
+            newBankItemIds.splice(insertAt, 0, itemId);
           }
-        } else {
-          // Place into bank
-          const insertAt = index ?? newBankItemIds.length;
-          newBankItemIds.splice(insertAt, 0, itemId);
-        }
 
-        const newVotes = tierId === null && prev.votes?.[itemId]
-          ? { ...prev.votes, [itemId]: undefined }
-          : prev.votes;
+          const newVotes = tierId === null && prev.votes?.[itemId]
+            ? { ...prev.votes, [itemId]: undefined }
+            : prev.votes;
 
-        return {
-          ...prev,
-          tiers: newTiers,
-          bankItemIds: newBankItemIds,
-          items: {
-            ...prev.items,
-            [itemId]: { ...prev.items[itemId], lockedBy: null, ownedBy },
-          },
-          votes: newVotes as typeof prev.votes,
-        };
-      });
+          return {
+            ...prev,
+            tiers: newTiers,
+            bankItemIds: newBankItemIds,
+            items: {
+              ...prev.items,
+              [itemId]: { ...prev.items[itemId], lockedBy: null, ownedBy },
+            },
+            votes: newVotes as typeof prev.votes,
+          };
+        });
+      };
+
+      if (wasRejected) {
+        setRejectedItemIds((prev) => new Set([...prev, itemId]));
+        const timer = setTimeout(() => {
+          applyMove();
+          setRejectedItemIds((prev) => { const s = new Set(prev); s.delete(itemId); return s; });
+          pendingRejectionsRef.current.delete(itemId);
+        }, 700);
+        pendingRejectionsRef.current.set(itemId, timer);
+      } else {
+        applyMove();
+      }
     });
 
     sock.on('CONNECTION_REJECTED', ({ reason }: { reason: string }) => {
@@ -304,6 +321,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     socketRef.current = sock;
 
     return () => {
+      for (const timer of pendingRejectionsRef.current.values()) clearTimeout(timer);
+      pendingRejectionsRef.current.clear();
       sock.disconnect();
       setSocket(null);
       socketRef.current = null;
@@ -331,6 +350,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       roomState, socket, currentUserId, isHost, rejectionReason,
       lockRejected, clearLockRejected: () => setLockRejected(null), sessionEnded, sessionEndReason, resetSession, cursors,
       activeDuel, clearActiveDuel: () => setActiveDuel(null),
+      rejectedItemIds,
     }}>
       {children}
     </GameContext.Provider>
