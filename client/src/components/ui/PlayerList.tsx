@@ -24,6 +24,20 @@ function userColor(userId: string): string {
 function Avatar({ participant }: { participant: Participant }) {
   const initials = (participant.username ?? '?').slice(0, 2).toUpperCase();
   const bg = userColor(participant.userId);
+  const avatarUrl = participant.avatar
+    ? `https://cdn.discordapp.com/avatars/${participant.userId}/${participant.avatar}.png?size=64`
+    : null;
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={participant.username}
+        className="h-7 w-7 flex-shrink-0 rounded-full object-cover shadow-sm"
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+      />
+    );
+  }
 
   return (
     <span
@@ -64,7 +78,7 @@ export function PlayerList({
         )}
       >
         <Users className="text-blue-400" size={16} />
-        <span>{count} {count === 1 ? 'Player' : 'Players'}</span>
+        <span>{count}</span>
         <span
           className={cn(
             'text-white/50 transition-transform duration-200',
