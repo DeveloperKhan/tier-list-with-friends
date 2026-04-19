@@ -32,7 +32,7 @@ import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
 import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
 import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, Z } from '@/lib/constants';
-import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, Trash2, Type, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, ThumbsDown, ThumbsUp, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -60,15 +60,19 @@ function DraggableItem({
   currentUserId,
   participants,
   isDragOverlay = false,
-  canDuel = false,
-  onDuel,
+  isBank = false,
+  votes = { up: [], down: [] },
+  onVoteUp,
+  onVoteDown,
 }: {
   item: ImageItem;
   currentUserId: string;
   participants: Record<string, Participant>;
   isDragOverlay?: boolean;
-  canDuel?: boolean;
-  onDuel?: (itemId: string) => void;
+  isBank?: boolean;
+  votes?: { up: string[]; down: string[] };
+  onVoteUp?: () => void;
+  onVoteDown?: () => void;
 }) {
   const isLockedByOther = item.lockedBy !== null && item.lockedBy !== currentUserId;
   const isOwnedByOther = item.ownedBy !== null && item.ownedBy !== currentUserId;
@@ -85,71 +89,95 @@ function DraggableItem({
 
   const blockerId = isLockedByOther ? item.lockedBy! : isOwnedByOther ? item.ownedBy! : null;
   const blocker = blockerId ? participants[blockerId] : null;
-  const blockerLabel = isLockedByOther ? 'Moving…' : 'Placed by';
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [tooltipBelow, setTooltipBelow] = useState(false);
-
-  function checkTooltipDirection() {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    setTooltipBelow(rect.top < 90);
-  }
+  const myVote = votes.up.includes(currentUserId) ? 'up' : votes.down.includes(currentUserId) ? 'down' : null;
 
   return (
     <div
-      ref={(node) => { setNodeRef(node); (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node; }}
+      ref={setNodeRef}
       style={style}
-      onMouseEnter={checkTooltipDirection}
       {...(canInteract && !isDragOverlay ? { ...attributes, ...listeners } : {})}
       className={cn(
-        'group relative aspect-square w-14 flex-shrink-0 rounded-lg bg-white/10',
+        'group relative flex-shrink-0 rounded-lg bg-white/10 hover:z-10',
+        'w-14 h-14',
+        !isBank && !isDragOverlay && 'hover:h-[6.5rem] transition-[height] duration-150',
         canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing touch-none',
-        isLockedByOther && 'opacity-50 cursor-not-allowed',
-        isOwnedByOther && 'opacity-75 ring-1 ring-white/20 cursor-not-allowed',
+        isLockedByOther && 'cursor-not-allowed',
+        isOwnedByOther && 'cursor-not-allowed',
         isDragging && !isDragOverlay && 'opacity-0',
-        isDragOverlay && 'scale-105 cursor-grabbing shadow-2xl ring-2 ring-purple-400',
+        isDragOverlay && 'scale-105 cursor-grabbing shadow-2xl',
       )}
     >
-      {/* Image clipped independently so the tooltip can escape */}
-      <div className="absolute inset-0 rounded-lg overflow-hidden">
+      {/* Image — always a fixed 56×56 square at the top */}
+      <div className={cn(
+        'absolute top-0 inset-x-0 h-14 overflow-hidden',
+        !isBank && !isDragOverlay ? 'rounded-t-lg group-hover:rounded-b-none rounded-b-lg' : 'rounded-lg',
+      )}>
         <img
           src={getItemSrc(item)}
           alt={item.fileName}
           draggable={false}
-          className="h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover"
         />
+        {isLockedByOther && (
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
+        )}
       </div>
-      {blocker && (
-        <div className={cn(
-          'absolute left-1/2 -translate-x-1/2 w-max opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50',
-          tooltipBelow ? 'top-full mt-1.5 flex-col-reverse' : 'bottom-full mb-1.5',
-          canDuel ? 'pointer-events-auto hover:opacity-100' : 'pointer-events-none',
-        )}>
-          <div className="flex items-center gap-1.5 rounded-lg bg-black/90 px-2 py-1.5 shadow-xl border border-white/10 whitespace-nowrap">
-            <img
-              src={discordAvatarUrl(blockerId!, blocker.avatar)}
-              alt={blocker.username}
-              className="h-4 w-4 rounded-full object-cover flex-none"
-            />
-            <div className="flex flex-col leading-none gap-0.5">
-              <span className="text-white/50 text-[9px]">{blockerLabel}</span>
-              <span className="text-white text-[10px] font-semibold">{blocker.username}</span>
-            </div>
-            {canDuel && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onDuel?.(item.id); }}
-                className="ml-1 rounded-md bg-purple-600 hover:bg-purple-500 px-1.5 py-0.5 text-[10px] font-black text-white transition-colors"
-              >
-                ⚔️ Duel
-              </button>
+
+      {/* Locked-by-other border */}
+      {isLockedByOther && (
+        <div
+          className="absolute top-0 inset-x-0 h-14 rounded-lg pointer-events-none transition-opacity duration-150 group-hover:opacity-0"
+          style={{ boxShadow: 'inset 0 0 0 2px rgba(239,68,68,0.9), inset 0 0 0 4px rgba(0,0,0,0.6)' }}
+        />
+      )}
+
+      {/* Owned-by-me border */}
+      {!isLockedByOther && item.ownedBy === currentUserId && !isDragOverlay && (
+        <div
+          className="absolute top-0 inset-x-0 h-14 rounded-lg pointer-events-none transition-opacity duration-150 group-hover:opacity-0"
+          style={{ boxShadow: 'inset 0 0 0 3px #3b82f6' }}
+        />
+      )}
+
+      {/* Vote controls — stacked vertically, revealed on hover */}
+      {!isDragOverlay && !isBank && (
+        <div className="absolute bottom-0 inset-x-0 flex flex-col rounded-b-lg overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-150" style={{ height: 'calc(6.5rem - 3.5rem)' }}>
+          <button
+            disabled={myVote === 'up'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onVoteUp?.(); }}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1 text-[10px] font-bold text-white transition-colors disabled:cursor-default',
+              myVote === 'up' ? 'bg-green-500/90' : 'bg-green-700/70 hover:bg-green-600/80',
             )}
-          </div>
-          {/* Caret */}
-          <div className={cn('mx-auto w-2 h-1 overflow-hidden flex justify-center', tooltipBelow ? 'order-first' : '')}>
-            <div className={cn('w-2 h-2 bg-black/90 border-white/10', tooltipBelow ? 'border-l border-t rotate-45 translate-y-1' : 'border-r border-b rotate-45 -translate-y-1')} />
-          </div>
+          >
+            <ThumbsUp size={11} strokeWidth={2.5} />
+            <span>{votes.up.length > 99 ? '99+' : votes.up.length}</span>
+          </button>
+          <button
+            disabled={myVote === 'down'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onVoteDown?.(); }}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1 text-[10px] font-bold text-white transition-colors disabled:cursor-default',
+              myVote === 'down' ? 'bg-red-500/90' : 'bg-red-700/70 hover:bg-red-600/80',
+            )}
+          >
+            <ThumbsDown size={11} strokeWidth={2.5} />
+            <span>{votes.down.length > 99 ? '99+' : votes.down.length}</span>
+          </button>
         </div>
+      )}
+
+      {/* Avatar badge — bleeds past the top-left corner */}
+      {blocker && (
+        <img
+          src={discordAvatarUrl(blockerId!, blocker.avatar)}
+          alt={blocker.username}
+          title={blocker.username}
+          className="absolute -top-1.5 -left-1.5 h-5 w-5 rounded-full border-2 border-game-bg object-cover shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
+        />
       )}
     </div>
   );
@@ -162,7 +190,7 @@ function DraggableItem({
 function TierItemSlot({ itemId, children }: { itemId: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: `slot:${itemId}` });
   return (
-    <div ref={setNodeRef} className={cn('rounded-lg', isOver && 'ring-2 ring-blue-400')}>
+    <div ref={setNodeRef} className={cn('relative rounded-lg hover:z-50', isOver && 'ring-2 ring-blue-400')}>
       {children}
     </div>
   );
@@ -171,7 +199,7 @@ function TierItemSlot({ itemId, children }: { itemId: string; children: React.Re
 function BankItemSlot({ itemId, children }: { itemId: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: `bank-slot:${itemId}` });
   return (
-    <div ref={setNodeRef} className={cn('rounded-lg', isOver && 'ring-2 ring-blue-400')}>
+    <div ref={setNodeRef} className={cn('relative rounded-lg hover:z-50', isOver && 'ring-2 ring-blue-400')}>
       {children}
     </div>
   );
@@ -182,15 +210,15 @@ function TierDropZone({
   items,
   currentUserId,
   participants,
-  failedDuels,
-  onDuel,
+  votes,
+  onVote,
 }: {
   tier: Tier;
   items: Record<string, ImageItem>;
   currentUserId: string;
   participants: Record<string, Participant>;
-  failedDuels: Record<string, string[]>;
-  onDuel: (itemId: string) => void;
+  votes: Record<string, { up: string[]; down: string[] }>;
+  onVote: (itemId: string, vote: 'up' | 'down') => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: tier.id });
 
@@ -205,16 +233,15 @@ function TierDropZone({
       {tier.itemIds.map((id) => {
         const item = items[id];
         if (!item) return null;
-        const isOwnedByOther = item.ownedBy !== null && item.ownedBy !== currentUserId;
-        const alreadyLost = (failedDuels[id] ?? []).includes(currentUserId);
         return (
           <TierItemSlot key={id} itemId={id}>
             <DraggableItem
               item={item}
               currentUserId={currentUserId}
               participants={participants}
-              canDuel={isOwnedByOther && !alreadyLost}
-              onDuel={onDuel}
+              votes={votes[id] ?? { up: [], down: [] }}
+              onVoteUp={() => onVote(id, 'up')}
+              onVoteDown={() => onVote(id, 'down')}
             />
           </TierItemSlot>
         );
@@ -353,6 +380,7 @@ function BankDropZone({
                 item={item}
                 currentUserId={currentUserId}
                 participants={participants}
+                isBank
               />
             </BankItemSlot>
           );
@@ -632,9 +660,9 @@ function _runConfettiFrame(
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   particlesRef.current = particlesRef.current.filter((p) => p.opacity > 0.01);
   for (const p of particlesRef.current) {
-    p.vy += 0.13; p.vx *= 0.99;
+    p.vy += 0.18; p.vx *= 0.99;
     p.x += p.vx; p.y += p.vy;
-    p.opacity -= 0.011; p.rotation += p.rotationSpeed;
+    p.opacity -= 0.022; p.rotation += p.rotationSpeed;
     ctx.save();
     ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
     ctx.globalAlpha = Math.max(0, p.opacity);
@@ -661,11 +689,11 @@ function spawnConfettiBurst(
   const cy = ny * canvas.height;
   for (let i = 0; i < 40; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 2.5 + Math.random() * 5.5;
+    const speed = 5 + Math.random() * 9;
     particlesRef.current.push({
       x: cx, y: cy,
       vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 3.5,
+      vy: Math.sin(angle) * speed - 7,
       color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
       opacity: 1,
       size: 5 + Math.random() * 6,
@@ -697,6 +725,9 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   const tierListRef = useRef<HTMLDivElement>(null);
   const drawContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const remoteCanvasContainerRef = useRef<HTMLDivElement>(null);
+  const remoteUserCanvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const playerMapRef = useRef<Record<number, string>>({});
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const confettiParticlesRef = useRef<ConfettiParticle[]>([]);
   const confettiAnimatingRef = useRef(false);
@@ -719,7 +750,22 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
     return palette[Math.abs(hash) % palette.length];
   }, [currentUserId]);
 
-  // Size both canvases to match their container; clears on resize (acceptable trade-off)
+  function getOrCreateRemoteCanvas(userId: string): HTMLCanvasElement {
+    const map = remoteUserCanvasesRef.current;
+    if (map.has(userId)) return map.get(userId)!;
+    const container = remoteCanvasContainerRef.current;
+    const c = document.createElement('canvas');
+    c.className = 'absolute inset-0 pointer-events-none';
+    if (container) {
+      c.width = container.clientWidth;
+      c.height = container.clientHeight;
+      container.appendChild(c);
+    }
+    map.set(userId, c);
+    return c;
+  }
+
+  // Size all canvases to match their container; clears on resize (acceptable trade-off)
   useEffect(() => {
     const container = drawContainerRef.current;
     const canvas = canvasRef.current;
@@ -729,6 +775,10 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
       if (confetti) { confetti.width = container.clientWidth; confetti.height = container.clientHeight; }
+      for (const c of remoteUserCanvasesRef.current.values()) {
+        c.width = container.clientWidth;
+        c.height = container.clientHeight;
+      }
     };
     sync();
     const ro = new ResizeObserver(sync);
@@ -764,15 +814,33 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
     };
   }, [socket]);
 
-  // Receive remote draw events and render onto the shared canvas
+  // Keep playerMapRef (index → userId) in sync for binary draw decoding
+  useEffect(() => {
+    if (!roomState) return;
+    const map: Record<number, string> = {};
+    for (const p of Object.values(roomState.participants)) map[p.index] = p.userId;
+    playerMapRef.current = map;
+  }, [roomState]);
+
+  // Receive remote draw events and render onto per-user canvases (binary-encoded)
   useEffect(() => {
     if (!socket) return;
-    const canvas = () => canvasRef.current;
-    const ctx = () => canvas()?.getContext('2d') ?? null;
 
-    function onStroke({ x0, y0, x1, y1, color }: { x0: number; y0: number; x1: number; y1: number; color: string }) {
-      const c = canvas(); const g = ctx();
-      if (!c || !g) return;
+    function decodeView(raw: unknown): DataView {
+      const ab = raw instanceof ArrayBuffer ? raw : (raw as { buffer: ArrayBuffer }).buffer;
+      return new DataView(ab);
+    }
+
+    function onStroke(raw: unknown) {
+      const v = decodeView(raw);
+      const userId = playerMapRef.current[v.getUint8(0)];
+      if (!userId) return;
+      const c = getOrCreateRemoteCanvas(userId);
+      const g = c.getContext('2d');
+      if (!g) return;
+      const x0 = v.getUint8(1) / 255; const y0 = v.getUint8(2) / 255;
+      const x1 = v.getUint8(3) / 255; const y1 = v.getUint8(4) / 255;
+      const color = `rgb(${v.getUint8(5)},${v.getUint8(6)},${v.getUint8(7)})`;
       g.beginPath();
       g.moveTo(x0 * c.width, y0 * c.height);
       g.lineTo(x1 * c.width, y1 * c.height);
@@ -780,22 +848,31 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       g.stroke();
     }
 
-    function onDot({ x, y, color }: { x: number; y: number; color: string }) {
-      const c = canvas(); const g = ctx();
-      if (!c || !g) return;
+    function onDot(raw: unknown) {
+      const v = decodeView(raw);
+      const userId = playerMapRef.current[v.getUint8(0)];
+      if (!userId) return;
+      const c = getOrCreateRemoteCanvas(userId);
+      const g = c.getContext('2d');
+      if (!g) return;
+      const x = v.getUint8(1) / 255; const y = v.getUint8(2) / 255;
       g.beginPath();
       g.arc(x * c.width, y * c.height, 1.5, 0, Math.PI * 2);
-      g.fillStyle = color; g.fill();
+      g.fillStyle = `rgb(${v.getUint8(3)},${v.getUint8(4)},${v.getUint8(5)})`; g.fill();
     }
 
-    function onClear() {
-      const c = canvas();
+    function onClear(raw: unknown) {
+      const v = decodeView(raw);
+      const userId = playerMapRef.current[v.getUint8(0)];
+      if (!userId) return;
+      const c = remoteUserCanvasesRef.current.get(userId);
       if (!c) return;
       c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
     }
 
-    function onConfetti({ x, y }: { x: number; y: number }) {
-      spawnConfettiBurst(confettiCanvasRef, confettiParticlesRef, confettiAnimatingRef, x, y);
+    function onConfetti(raw: unknown) {
+      const v = decodeView(raw);
+      spawnConfettiBurst(confettiCanvasRef, confettiParticlesRef, confettiAnimatingRef, v.getUint8(0) / 255, v.getUint8(1) / 255);
     }
 
     socket.on('DRAW_STROKE', onStroke);
@@ -808,6 +885,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       socket.off('DRAW_CLEAR', onClear);
       socket.off('CONFETTI_BURST', onConfetti);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   if (!roomState || !socket) return null;
@@ -1300,7 +1378,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
           </header>
 
           {/* Tier list + drawing layer */}
-          <div ref={drawContainerRef} className="relative flex-1 overflow-hidden">
+          <div ref={drawContainerRef} className="relative flex-1">
             <main ref={tierListRef} className="game-scroll h-full overflow-y-auto bg-game-bg">
               {roomState.tiers.map((tier) => (
                 <div
@@ -1339,8 +1417,8 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                     items={roomState.items}
                     currentUserId={currentUserId}
                     participants={roomState.participants}
-                    failedDuels={roomState.failedDuels ?? {}}
-                    onDuel={(itemId) => socket?.emit('DUEL_CHALLENGE', { itemId })}
+                    votes={roomState.votes ?? {}}
+                    onVote={(itemId, vote) => socket?.emit('VOTE_ITEM', { itemId, vote })}
                   />
                 </div>
               ))}
@@ -1362,7 +1440,17 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
               )}
             />
 
-            {/* Canvas drawing overlay — pointer-events controlled by active tool */}
+            {/* Per-user remote drawing canvases — one canvas per remote player, managed imperatively */}
+            <div
+              ref={remoteCanvasContainerRef}
+              style={{ zIndex: Z.canvasBase }}
+              className={cn(
+                'absolute inset-0 pointer-events-none transition-opacity duration-150',
+                drawingsHidden && 'opacity-0',
+              )}
+            />
+
+            {/* Canvas drawing overlay — current user's strokes only; pointer-events controlled by active tool */}
             <canvas
               ref={canvasRef}
               style={{ zIndex: Z.canvasBase }}
@@ -1433,7 +1521,11 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                 </button>
                 {/* Hide/show drawings */}
                 <button
-                  onClick={() => setDrawingsHidden((v) => !v)}
+                  onClick={() => setDrawingsHidden((v) => {
+                    const next = !v;
+                    socket?.emit('SET_DRAWINGS_VISIBLE', { visible: !next });
+                    return next;
+                  })}
                   title={drawingsHidden ? 'Show drawings' : 'Hide drawings'}
                   className={cn(
                     'rounded-lg p-1.5 transition-colors',

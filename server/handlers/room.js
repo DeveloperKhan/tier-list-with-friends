@@ -21,6 +21,7 @@ function createRoom(instanceId, hostId) {
     bankItemIds: [],
     participants: {},
     failedDuels: {},
+    votes: {},
     nextParticipantIndex: 0,
   };
 }

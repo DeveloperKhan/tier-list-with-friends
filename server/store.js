@@ -53,7 +53,8 @@ export async function getSocketInfo(socketId) {
 }
 
 export async function setSocketInfo(socketId, info) {
-  socketInfo.set(socketId, info);
+  const existing = socketInfo.get(socketId) ?? {};
+  socketInfo.set(socketId, { ...existing, ...info });
 }
 
 export async function deleteSocketInfo(socketId) {

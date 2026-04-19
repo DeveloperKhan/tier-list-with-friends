@@ -85,6 +85,8 @@ export function registerItemHandlers(io, socket) {
       room.bankItemIds.splice(idx, 0, itemId);
       item.ownedBy = null;
       placedIndex = idx;
+      // Clear votes when item returns to bank
+      if (room.votes?.[itemId]) delete room.votes[itemId];
     }
 
     item.lockedBy = null;

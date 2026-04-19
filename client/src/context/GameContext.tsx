@@ -54,7 +54,8 @@ export type RoomState = {
   items: Record<string, ImageItem>;
   bankItemIds: string[];
   participants: Record<string, Participant>;
-  failedDuels: Record<string, string[]>; // itemId -> userId[]
+  failedDuels: Record<string, string[]>; // itemId -> userId[] (legacy, kept for server compat)
+  votes: Record<string, { up: string[]; down: string[] }>; // itemId -> { up: userId[], down: userId[] }
 };
 
 export type DuelResult = {
@@ -224,6 +225,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           newBankItemIds.splice(insertAt, 0, itemId);
         }
 
+        const newVotes = tierId === null && prev.votes?.[itemId]
+          ? { ...prev.votes, [itemId]: undefined }
+          : prev.votes;
+
         return {
           ...prev,
           tiers: newTiers,
@@ -232,6 +237,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             ...prev.items,
             [itemId]: { ...prev.items[itemId], lockedBy: null, ownedBy },
           },
+          votes: newVotes as typeof prev.votes,
         };
       });
     });
@@ -266,6 +272,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const x = view.getUint8(1) / 255;
       const y = view.getUint8(2) / 255;
       setCursors((prev) => ({ ...prev, [userId]: { x, y, lastSeen: Date.now() } }));
+    });
+
+    sock.on('VOTE_CHANGED', ({ itemId, votes }: { itemId: string; votes: { up: string[]; down: string[] } }) => {
+      setRoomState((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          votes: { ...prev.votes, [itemId]: votes },
+        };
+      });
     });
 
     sock.on('DUEL_RESULT', (result: DuelResult) => {
