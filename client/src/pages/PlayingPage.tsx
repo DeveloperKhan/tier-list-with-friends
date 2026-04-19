@@ -32,7 +32,7 @@ import { PlayerList } from '@/components/ui/PlayerList';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
 import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
 import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, Z } from '@/lib/constants';
-import { ChevronDown, ChevronUp, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, ThumbsDown, ThumbsUp, Trash2, Type, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Download, Eraser, Eye, EyeOff, Hand, Layers, LogOut, PartyPopper, Pencil, Plus, ThumbsDown, ThumbsUp, Trash2, Type, Upload } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Toast
@@ -320,10 +320,82 @@ function BankDropZone({
   const { setNodeRef, isOver } = useDroppable({ id: 'bank' });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mobileItemsRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const [showTextPopup, setShowTextPopup] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(pointer: coarse)').matches);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [scrollMax, setScrollMax] = useState(0);
+  const [clientWidth, setClientWidth] = useState(0);
+  const [scrollWidth, setScrollWidth] = useState(0);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const updateScrollState = () => {
+    const el = mobileItemsRef.current;
+    if (!el) return;
+    setScrollLeft(el.scrollLeft);
+    setScrollWidth(el.scrollWidth);
+    setClientWidth(el.clientWidth);
+    setScrollMax(el.scrollWidth - el.clientWidth);
+  };
+
+  useEffect(() => {
+    if (!isMobile) return;
+    updateScrollState();
+  }, [isMobile, bankItemIds.length]);
+
+  const thumbDragging = useRef(false);
+  const thumbDragStartX = useRef(0);
+  const thumbDragStartScroll = useRef(0);
+
+  const scrollByItem = (dir: -1 | 1) => {
+    mobileItemsRef.current?.scrollBy({ left: dir * 62, behavior: 'smooth' });
+  };
+
+  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (thumbDragging.current) return;
+    const track = trackRef.current;
+    const el = mobileItemsRef.current;
+    if (!track || !el) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    el.scrollLeft = ratio * (el.scrollWidth - el.clientWidth);
+  };
+
+  const handleThumbPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    thumbDragging.current = true;
+    thumbDragStartX.current = e.clientX;
+    thumbDragStartScroll.current = mobileItemsRef.current?.scrollLeft ?? 0;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleThumbPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!thumbDragging.current) return;
+    const track = trackRef.current;
+    const el = mobileItemsRef.current;
+    if (!track || !el) return;
+    const dx = e.clientX - thumbDragStartX.current;
+    const thumbW = (clientWidth / scrollWidth) * track.clientWidth;
+    const availTrack = track.clientWidth - thumbW;
+    if (availTrack <= 0) return;
+    el.scrollLeft = thumbDragStartScroll.current + (dx / availTrack) * (el.scrollWidth - el.clientWidth);
+  };
+
+  const handleThumbPointerUp = () => {
+    thumbDragging.current = false;
+  };
 
   // Redirect vertical scroll to horizontal so mouse-wheel users can scroll the bank
   useEffect(() => {
+    if (isMobile) return;
     const el = scrollRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
@@ -333,12 +405,114 @@ function BankDropZone({
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [isMobile]);
 
   // Combine dnd-kit ref with our scroll ref
   function bankRef(node: HTMLDivElement | null) {
     setNodeRef(node);
     (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+  }
+
+  const controls = (
+    <div className="flex flex-shrink-0 flex-col gap-1">
+      <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title={`Upload images (${ACCEPTED_LABEL})`}>
+        <Upload size={13} />
+      </GameButton>
+      <GameButton variant="ghost" size="sm" onClick={() => setShowTextPopup(true)} title="Add text items">
+        <Type size={13} />
+      </GameButton>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_ACCEPT}
+        multiple
+        className="sr-only"
+        onChange={(e) => {
+          if (e.target.files) onUploadFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+
+  if (isMobile) {
+    const hasOverflow = scrollWidth > clientWidth;
+    const thumbRatio = hasOverflow ? clientWidth / scrollWidth : 1;
+    const thumbOffset = hasOverflow ? (scrollLeft / scrollMax) * (1 - thumbRatio) : 0;
+
+    return (
+      <>
+        <div
+          ref={setNodeRef}
+          className={cn(
+            'flex flex-shrink-0 flex-col border-t-2 border-white/10 bg-game-panel/60 transition-colors',
+            isOver && 'border-purple-400/50 bg-purple-900/20',
+          )}
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          {/* Items row */}
+          <div className="flex flex-1 items-center gap-1.5 px-2" style={{ height: 'calc(4rem + 0.5rem)' }}>
+            {controls}
+            <div className="h-14 w-px flex-shrink-0 bg-white/10" />
+            <div
+              ref={mobileItemsRef}
+              className="flex flex-1 items-center gap-1.5 overflow-x-auto"
+              style={{ scrollbarWidth: 'none' }}
+              onScroll={updateScrollState}
+            >
+              {bankItemIds.map((id) => {
+                const item = items[id];
+                if (!item) return null;
+                return (
+                  <BankItemSlot key={id} itemId={id}>
+                    <DraggableItem item={item} currentUserId={currentUserId} participants={participants} isBank />
+                  </BankItemSlot>
+                );
+              })}
+              {bankItemIds.length === 0 && (
+                <span className="select-none text-xs font-semibold text-white/20">All items placed</span>
+              )}
+            </div>
+          </div>
+
+          {/* Scrollbar row */}
+          <div className="flex items-center gap-2 px-2 pb-3">
+            <button
+              className="flex-shrink-0 rounded p-1.5 text-white/40 hover:text-white/70 disabled:opacity-20 transition-colors"
+              onClick={() => scrollByItem(-1)}
+              disabled={scrollLeft <= 0}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div
+              ref={trackRef}
+              className="relative flex-1 cursor-pointer py-3"
+              onClick={handleTrackClick}
+            >
+              <div className="h-2 w-full rounded-full bg-white/10" />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 h-2 rounded-full bg-white/50 cursor-grab active:cursor-grabbing touch-none"
+                style={{ width: `${thumbRatio * 100}%`, left: `${thumbOffset * 100}%` }}
+                onPointerDown={handleThumbPointerDown}
+                onPointerMove={handleThumbPointerMove}
+                onPointerUp={handleThumbPointerUp}
+              />
+            </div>
+            <button
+              className="flex-shrink-0 rounded p-1.5 text-white/40 hover:text-white/70 disabled:opacity-20 transition-colors"
+              onClick={() => scrollByItem(1)}
+              disabled={scrollLeft >= scrollMax}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+
+        {showTextPopup && (
+          <AddTextPopup onAdd={onAddText} onClose={() => setShowTextPopup(false)} />
+        )}
+      </>
+    );
   }
 
   return (
@@ -352,32 +526,13 @@ function BankDropZone({
         )}
         style={{ height: 'calc(6rem + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {/* Controls */}
-        <div className="flex flex-shrink-0 flex-col gap-1">
-          <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title={`Upload images (${ACCEPTED_LABEL})`}>
-            <Upload size={13} />
-          </GameButton>
-          <GameButton variant="ghost" size="sm" onClick={() => setShowTextPopup(true)} title="Add text items">
-            <Type size={13} />
-          </GameButton>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_ACCEPT}
-            multiple
-            className="sr-only"
-            onChange={(e) => {
-              if (e.target.files) onUploadFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-        </div>
+        {controls}
 
         {/* Divider */}
         <div className="h-14 w-px flex-shrink-0 bg-white/10" />
 
         {/* Items */}
-        {bankItemIds.map((id) => {
+        {bankItemIds.map((id: string) => {
           const item = items[id];
           if (!item) return null;
           return (
