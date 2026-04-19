@@ -1,4 +1,4 @@
-# Tier List with Friends
+# Tier Lists with Friends
 
 A live, collaborative tier list builder for Discord voice channels. Multiple players in the same voice channel drag and drop images into tiers together in real time.
 

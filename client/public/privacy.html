@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Policy — Tier List with Friends</title>
+  <title>Privacy Policy — Tier Lists with Friends</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 680px; margin: 60px auto; padding: 0 24px; line-height: 1.7; color: #1a1a1a; }
     h1 { font-size: 1.8rem; margin-bottom: 4px; }
@@ -13,28 +13,29 @@
 </head>
 <body>
   <h1>Privacy Policy</h1>
-  <p class="meta">Tier List with Friends &middot; Last updated: April 2025</p>
+  <p class="meta">Tier Lists with Friends &middot; Last updated: April 2026</p>
 
-  <h2>We collect nothing.</h2>
-  <p>Tier List with Friends does not collect, store, or sell any personal information.</p>
-
-  <h2>What happens during a session</h2>
-  <p>While a voice-channel session is active, the following data is held temporarily in server RAM:</p>
+  <h2>What data we handle</h2>
+  <p>While a voice-channel session is active, the following data is processed:</p>
   <ul>
-    <li>Your Discord user ID and display name (provided by Discord)</li>
-    <li>Images you upload to the tier list (as base64 data)</li>
-    <li>The tier list arrangement you and other participants create</li>
+    <li><strong>Discord user ID and display name</strong> — provided by Discord, held in server memory for the life of the session only.</li>
+    <li><strong>Images you upload</strong> — stored in Cloudflare R2 (cloud object storage) for up to 24 hours, then automatically and permanently deleted.</li>
+    <li><strong>Tier list export renders</strong> — if you share your tier list result, the exported image is stored in Cloudflare R2 for up to 24 hours, then automatically deleted.</li>
+    <li><strong>Tier list arrangement</strong> — held in server memory for the life of the session only.</li>
   </ul>
-  <p>This data exists <strong>only in memory</strong>. It is never written to a database, log file, or any storage medium. It is permanently gone when the session ends (all participants leave or the host resets).</p>
+  <p>We do not use cookies, analytics, tracking pixels, or fingerprinting of any kind. We do not operate any persistent database.</p>
+
+  <h2>Image storage</h2>
+  <p>Uploaded images and export renders are stored in <a href="https://developers.cloudflare.com/r2/" target="_blank" rel="noopener">Cloudflare R2</a>, a cloud object storage service operated by Cloudflare, Inc. Each image is identified by a randomly generated UUID. Images are not listed publicly, but anyone who obtains the UUID can access the image during its 24-hour retention window. A scheduled cleanup job runs every 6 hours and permanently deletes all expired objects.</p>
+  <p>You should not upload images containing sensitive personal data.</p>
 
   <h2>Third parties</h2>
-  <p>We do not share any data with third parties. Discord's own <a href="https://discord.com/privacy" target="_blank" rel="noopener">Privacy Policy</a> governs how Discord handles your identity and OAuth tokens.</p>
-
-  <h2>Cookies &amp; tracking</h2>
-  <p>None. The Activity sets no cookies and uses no analytics, tracking pixels, or fingerprinting.</p>
+  <p><strong>Cloudflare, Inc.</strong> processes image data as a sub-processor via R2. Their privacy practices are described in the <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Privacy Policy</a>.</p>
+  <p><strong>Discord, Inc.</strong> governs your identity and OAuth tokens. See Discord's <a href="https://discord.com/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+  <p>We do not sell or share your data with any other third party.</p>
 
   <h2>Children</h2>
-  <p>The Activity does not knowingly collect information from anyone, including children under 13. Because no data is collected, there is nothing to delete.</p>
+  <p>The Activity is available to all Discord users. We do not knowingly collect personal information from children under 13 beyond what Discord's own age-gating permits. Uploaded images are deleted within 24 hours regardless of who uploaded them.</p>
 
   <h2>Contact</h2>
   <p>Questions? Email <a href="mailto:adib.khan@gmail.com">adib.khan@gmail.com</a>.</p>

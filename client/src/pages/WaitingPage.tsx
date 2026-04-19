@@ -43,7 +43,7 @@ export function WaitingPage() {
           <img src={logoUrl} alt="Logo" className="h-8 w-8 rounded-lg" />
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-game-purple-light">Lobby</p>
-            <h1 className="text-lg font-black text-white leading-tight">Tier List with Friends</h1>
+            <h1 className="text-lg font-black text-white leading-tight">Tier Lists with Friends</h1>
           </div>
         </div>
         <PlayerList
