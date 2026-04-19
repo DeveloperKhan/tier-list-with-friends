@@ -10,7 +10,6 @@ export const DEFAULT_TIERS = [
   { label: "B", color: "#FFD700" },
   { label: "C", color: "#32CD32" },
   { label: "D", color: "#1E90FF" },
-  { label: "F", color: "#9932CC" },
 ];
 
 export const TIER_PALETTE = [

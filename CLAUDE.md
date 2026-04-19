@@ -206,7 +206,7 @@ type RoomState = {
   channelId: string;
   phase: 'SETUP' | 'PLAYING';
   hostId: string;                // userId of current host
-  tiers: Tier[];                 // ordered; default [A, B, C, D, F]
+  tiers: Tier[];                 // ordered; default [S, A, B, C, D]
   items: Record<string, ImageItem>; // all images (bank + placed)
   bankItemIds: string[];         // items not yet placed in any tier
 };
