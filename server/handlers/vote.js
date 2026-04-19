@@ -42,6 +42,8 @@ export function registerVoteHandlers(io, socket) {
         room.bankItemIds.push(itemId);
         room.items[itemId].ownedBy = null;
         room.items[itemId].lockedBy = null;
+        // Broadcast the downvote first so clients see the score update before ejection
+        io.to(info.instanceId).emit("VOTE_CHANGED", { itemId, votes: itemVotes });
         delete room.votes[itemId];
         await setRoom(info.instanceId, room);
         io.to(info.instanceId).emit("ITEM_MOVED", {

@@ -102,7 +102,7 @@ function DraggableItem({
       className={cn(
         'group relative flex-shrink-0 rounded-lg bg-white/10 hover:z-10',
         'w-14 h-14',
-        !isBank && !isDragOverlay && 'hover:h-[6.5rem] transition-[height] duration-150',
+        !isBank && !isDragOverlay && 'hover:rounded-b-none',
         canInteract && !isDragOverlay && 'cursor-grab active:cursor-grabbing touch-none',
         isLockedByOther && 'cursor-not-allowed',
         isOwnedByOther && 'cursor-not-allowed',
@@ -111,10 +111,10 @@ function DraggableItem({
         isRejected && 'animate-item-reject',
       )}
     >
-      {/* Image — always a fixed 56×56 square at the top */}
+      {/* Image — always a fixed 56×56 square */}
       <div className={cn(
-        'absolute top-0 inset-x-0 h-14 overflow-hidden',
-        !isBank && !isDragOverlay ? 'rounded-t-lg group-hover:rounded-b-none rounded-b-lg' : 'rounded-lg',
+        'absolute inset-0 overflow-hidden rounded-lg',
+        !isBank && !isDragOverlay && 'group-hover:rounded-b-none',
       )}>
         <img
           src={getItemSrc(item)}
@@ -145,14 +145,14 @@ function DraggableItem({
 
       {/* Vote controls — stacked vertically, revealed on hover */}
       {!isDragOverlay && !isBank && (
-        <div className="absolute bottom-0 inset-x-0 flex flex-col rounded-b-lg overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-150" style={{ height: 'calc(6.5rem - 3.5rem)' }}>
+        <div className="absolute top-full inset-x-0 flex flex-col rounded-b-lg overflow-hidden opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150" style={{ height: '3rem' }}>
           <button
             disabled={myVote === 'up'}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onVoteUp?.(); }}
             className={cn(
               'flex flex-1 items-center justify-center gap-1 text-[10px] font-bold text-white transition-colors disabled:cursor-default',
-              myVote === 'up' ? 'bg-green-500/90' : 'bg-green-700/70 hover:bg-green-600/80',
+              myVote === 'up' ? 'bg-green-500' : 'bg-green-700 hover:bg-green-600',
             )}
           >
             <ThumbsUp size={11} strokeWidth={2.5} />
@@ -164,7 +164,7 @@ function DraggableItem({
             onClick={(e) => { e.stopPropagation(); onVoteDown?.(); }}
             className={cn(
               'flex flex-1 items-center justify-center gap-1 text-[10px] font-bold text-white transition-colors disabled:cursor-default',
-              myVote === 'down' ? 'bg-red-500/90' : 'bg-red-700/70 hover:bg-red-600/80',
+              myVote === 'down' ? 'bg-red-500' : 'bg-red-700 hover:bg-red-600',
             )}
           >
             <ThumbsDown size={11} strokeWidth={2.5} />
@@ -193,7 +193,7 @@ function DraggableItem({
 function TierItemSlot({ itemId, children }: { itemId: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: `slot:${itemId}` });
   return (
-    <div ref={setNodeRef} className={cn('relative rounded-lg hover:z-50', isOver && 'ring-2 ring-blue-400')}>
+    <div ref={setNodeRef} className={cn('relative rounded-lg hover:z-50 overflow-visible', isOver && 'ring-2 ring-blue-400')}>
       {children}
     </div>
   );
