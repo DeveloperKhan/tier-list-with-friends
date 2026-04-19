@@ -1113,12 +1113,13 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       const blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', 0.92),
       );
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = `${roomState!.title || 'tier-list'}.jpg`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      const fileName = `${roomState!.title || 'tier-list'}.jpg`;
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: fileName });
+      } else {
+        setToast('Sharing not supported on this device.');
+      }
     } catch (err) {
       console.error('[export]', err);
       setToast('Export failed. Please try again.');
