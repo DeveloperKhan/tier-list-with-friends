@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 const router = Router();
 
 async function proxyToSidecar(path, res) {
-  const SIDECAR_URL = process.env.TIERMAKER_SIDECAR_URL?.replace(/\/$/, "");
+  const SIDECAR_URL = (process.env.TIERMAKER_SIDECAR_URL ?? 'http://localhost:3002').replace(/\/$/, "");
   if (!SIDECAR_URL) {
     return res.status(503).json({
       error: "TierMaker sidecar is not configured (TIERMAKER_SIDECAR_URL not set)",
