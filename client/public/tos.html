@@ -22,7 +22,7 @@
   <p>Tier Lists with Friends is a Discord Embedded Activity that lets users in the same voice channel collaboratively rank images in real time.</p>
 
   <h2>3. Data Storage</h2>
-  <p>Session state (Discord user IDs, display names, tier list arrangement) is held in server memory for the duration of an active session and permanently deleted when the session ends. Images you upload and tier list export renders are stored in Cloudflare R2 cloud storage for up to 24 hours and then automatically deleted. No persistent database is used.</p>
+  <p>Session state (Discord user IDs, display names, tier list arrangement) is held in server memory for the duration of an active session and permanently deleted when the session ends. Images you upload are stored in Cloudflare R2 cloud storage for up to 24 hours and then automatically deleted. Tier list exports are uploaded to <a href="https://imgbb.com" target="_blank" rel="noopener">imgbb</a> and subject to their retention policy. No persistent database is used.</p>
 
   <h2>4. User Content</h2>
   <p>Any images you upload are stored temporarily (up to 24 hours) solely to facilitate the shared session. You are responsible for ensuring you have the right to use any content you upload. Do not upload images containing sensitive personal data, illegal content, or content that violates Discord's <a href="https://discord.com/terms" target="_blank" rel="noopener">Terms of Service</a>.</p>

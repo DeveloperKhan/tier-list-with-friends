@@ -22,6 +22,7 @@ function collisionDetection(...args: Parameters<typeof rectIntersection>) {
   return hits.length > 0 ? hits : rectIntersection(...args);
 }
 import { useGame, type ImageItem, type Participant, type Tier } from '@/context/GameContext';
+import { useDiscord, isInsideDiscord } from '@/context/DiscordContext';
 import { PlayerCursors } from '@/components/PlayerCursors';
 import { DuelCutscene } from '@/components/DuelCutscene';
 import { GameButton } from '@/components/ui/GameButton';
@@ -542,6 +543,46 @@ function EditTiersModal({
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// ExportModal
+// ---------------------------------------------------------------------------
+
+function ExportModal({ url, onClose, onOpen }: { url: string; onClose: () => void; onOpen: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <Panel className="flex w-full max-w-sm flex-col gap-4 p-5">
+        <div className="flex items-center justify-between">
+          <span className="font-black text-white">Export Ready</span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors text-lg leading-none">✕</button>
+        </div>
+        <p className="text-xs text-white/60">Your tier list has been uploaded. Open or copy the link to save the image.</p>
+        <div className="flex gap-1.5">
+          <input
+            readOnly
+            value={url}
+            className="game-input flex-1 py-1 text-xs"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+          />
+          <GameButton variant="ghost" size="sm" onClick={handleCopy}>
+            {copied ? '✓' : 'Copy'}
+          </GameButton>
+          <GameButton variant="primary" size="sm" onClick={onOpen}>
+            Open
+          </GameButton>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // End Session Confirm
 // ---------------------------------------------------------------------------
 
@@ -643,9 +684,11 @@ function spawnConfettiBurst(
 
 export function PlayingPage() {
   const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected, activeDuel, clearActiveDuel } = useGame();
+  const discord = useDiscord();
   const [activeItem, setActiveItem] = useState<ImageItem | null>(null);
   const [showEditTiers, setShowEditTiers] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   const [showDrawBar, setShowDrawBar] = useState(true);
@@ -1113,13 +1156,14 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       const blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/jpeg', 0.92),
       );
-      const fileName = `${roomState!.title || 'tier-list'}.jpg`;
-      const file = new File([blob], fileName, { type: 'image/jpeg' });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
-      } else {
-        setToast('Sharing not supported on this device.');
-      }
+      const form = new FormData();
+      form.append('key', import.meta.env.VITE_IMGBB_API_KEY as string);
+      form.append('name', roomState!.title || 'tier-list');
+      form.append('image', new File([blob], 'export.jpg', { type: 'image/jpeg' }));
+      const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`imgbb ${res.status}`);
+      const { data } = await res.json() as { data: { url: string } };
+      setExportUrl(data.url);
     } catch (err) {
       console.error('[export]', err);
       setToast('Export failed. Please try again.');
@@ -1407,7 +1451,21 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
         />
       )}
 
-{toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+      {exportUrl && (
+        <ExportModal
+          url={exportUrl}
+          onClose={() => setExportUrl(null)}
+          onOpen={() => {
+            if (isInsideDiscord && discord.status === 'ready') {
+              discord.discordSdk.commands.openExternalLink({ url: exportUrl });
+            } else {
+              window.open(exportUrl, '_blank');
+            }
+          }}
+        />
+      )}
+
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
       {activeDuel && (activeDuel.challengerId === currentUserId || activeDuel.ownerId === currentUserId) && (
         <DuelCutscene
