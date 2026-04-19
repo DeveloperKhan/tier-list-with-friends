@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import squareLogoUrl from '../../assets/square-logo.svg?url';
+import discordLogoUrl from '../../assets/discord-logo.svg?url';
 import {
   DndContext,
   DragOverlay,
@@ -972,13 +973,21 @@ export function PlayingPage() {
       const HEADER_H = 56;
       const ACCENT_H = 3;
 
-      // Load logo in parallel with images
-      const logoImg = await new Promise<HTMLImageElement>((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(img);
-        img.src = squareLogoUrl;
-      });
+      // Load app logo + Discord logo in parallel
+      const [logoImg, discordImg] = await Promise.all([
+        new Promise<HTMLImageElement>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(img);
+          img.src = squareLogoUrl;
+        }),
+        new Promise<HTMLImageElement>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(img);
+          img.src = discordLogoUrl;
+        }),
+      ]);
 
       const canvas = document.createElement('canvas');
       canvas.width = CANVAS_W * SCALE;
@@ -1006,28 +1015,61 @@ export function PlayingPage() {
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
       ctx.fillRect(0, HEADER_H - 1, CANVAS_W, 1);
 
-      // Logo + text group, centered
       const LOGO_SIZE = 32;
       const LOGO_GAP = 10;
-      const WATERMARK = 'Tier Lists with Friends';
-      ctx.font = 'bold 18px sans-serif';
-      const groupW = LOGO_SIZE + LOGO_GAP + ctx.measureText(WATERMARK).width;
-      const groupX = (CANVAS_W - groupW) / 2;
+      const H_PAD = 16;
       const centerY = ACCENT_H + (HEADER_H - ACCENT_H) / 2;
+      const textX = H_PAD + LOGO_SIZE + LOGO_GAP;
 
-      // Logo clipped to rounded square
+      // Two-line stack heights: title (14px) + gap (4px) + discord row (10px) = 28px
+      const TITLE_SIZE = 14;
+      const DISC_ROW_SIZE = 9;
+      const LINE_GAP = 4;
+      const stackH = TITLE_SIZE + LINE_GAP + DISC_ROW_SIZE;
+      const titleY = centerY - stackH / 2 + TITLE_SIZE / 2;
+      const discRowY = titleY + TITLE_SIZE / 2 + LINE_GAP + DISC_ROW_SIZE / 2;
+
+      // Left: app logo centered on full stack
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(groupX, centerY - LOGO_SIZE / 2, LOGO_SIZE, LOGO_SIZE, 7);
+      ctx.roundRect(H_PAD, centerY - LOGO_SIZE / 2, LOGO_SIZE, LOGO_SIZE, 7);
       ctx.clip();
-      ctx.drawImage(logoImg, groupX, centerY - LOGO_SIZE / 2, LOGO_SIZE, LOGO_SIZE);
+      ctx.drawImage(logoImg, H_PAD, centerY - LOGO_SIZE / 2, LOGO_SIZE, LOGO_SIZE);
       ctx.restore();
 
-      // Watermark text
+      // Title
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(WATERMARK, groupX + LOGO_SIZE + LOGO_GAP, centerY);
+      ctx.font = `bold ${TITLE_SIZE}px sans-serif`;
+      ctx.fillText('Tier Lists with Friends', textX, titleY);
+
+      // Discord row: icon + label in a subtle dark pill
+      const DISC_SIZE = 10;
+      const DISC_ASPECT = 96.36 / 127.14;
+      const DISC_H = DISC_SIZE * DISC_ASPECT;
+      const DISC_LABEL = 'Find in Discord Activities';
+      const ICON_TEXT_GAP = 5;
+      ctx.font = `${DISC_ROW_SIZE}px sans-serif`;
+      const discLabelW = ctx.measureText(DISC_LABEL).width;
+      const discRowW = DISC_SIZE + ICON_TEXT_GAP + discLabelW;
+
+      const pillPadX = 6;
+      const pillPadY = 3;
+      const pillH = DISC_ROW_SIZE + pillPadY * 2;
+      const pillW = discRowW + pillPadX * 2;
+      const pillX = textX - pillPadX;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.roundRect(pillX, discRowY - pillH / 2, pillW, pillH, pillH / 2);
+      ctx.fill();
+
+      ctx.drawImage(discordImg, textX, discRowY - DISC_H / 2, DISC_SIZE, DISC_H);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(DISC_LABEL, textX + DISC_SIZE + ICON_TEXT_GAP, discRowY);
 
       let y = HEADER_H;
       for (let i = 0; i < tiers.length; i++) {
