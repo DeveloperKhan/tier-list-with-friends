@@ -144,7 +144,9 @@
   "language": {
     "en": "Inglés",
     "ja": "Japonés",
-    "es": "Español"
+    "es": "Español",
+    "pt": "Portugués",
+    "zh": "Chino"
   },
   "server": {
     "roomFull": "La sala está llena (máximo {{max}} jugadores).",
