@@ -29,21 +29,22 @@ const TIERMAKER_BASE = 'https://tiermaker.com';
 // ---------------------------------------------------------------------------
 
 let browser = null;
+let _browserLaunchPromise = null;
 
 async function getBrowser() {
-  if (!browser || !browser.isConnected()) {
-    const isProduction = process.platform === 'linux';
-    browser = await chromium.launch(
-      isProduction
-        ? {
-            args: sparticuzChromium.args,
-            executablePath: await sparticuzChromium.executablePath(),
-            headless: true,
-          }
-        : { headless: true }
-    );
+  if (browser?.isConnected()) return browser;
+  if (!_browserLaunchPromise) {
+    _browserLaunchPromise = (async () => {
+      const executablePath = await sparticuzChromium.executablePath();
+      // --single-process is fine for Lambda but kills the whole browser if any
+      // page crashes in a persistent server — remove it.
+      const args = sparticuzChromium.args.filter(a => a !== '--single-process');
+      const b = await chromium.launch({ args, executablePath, headless: true });
+      browser = b;
+      return b;
+    })().finally(() => { _browserLaunchPromise = null; });
   }
-  return browser;
+  return _browserLaunchPromise;
 }
 
 // ---------------------------------------------------------------------------
