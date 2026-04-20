@@ -193,6 +193,22 @@ export function registerRoomHandlers(io, socket) {
     console.log(`[room:${info.instanceId}] game started — ${sanitisedBankIds.length} items, ${sanitisedTiers.length} tiers`);
   });
 
+  // ── CLAIM_PREMIUM ─────────────────────────────────────────────────────────
+  socket.on("CLAIM_PREMIUM", async () => {
+    const info = await getSocketInfo(socket.id);
+    if (!info) return;
+    const room = await getRoom(info.instanceId);
+    if (!room || room.isPremium) return; // already premium, nothing to do
+
+    const premium = await hasPremiumEntitlement(info.userId);
+    if (!premium) return;
+
+    room.isPremium = true;
+    await setRoom(info.instanceId, room);
+    io.to(info.instanceId).emit("STATE_UPDATE", room);
+    console.log(`[room:${info.instanceId}] premium claimed by ${info.userId}`);
+  });
+
   // ── END_SESSION (host only) ───────────────────────────────────────────────
   socket.on("END_SESSION", async () => {
     const info = await getSocketInfo(socket.id);

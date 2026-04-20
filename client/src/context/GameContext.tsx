@@ -56,6 +56,7 @@ export type RoomState = {
   participants: Record<string, Participant>;
   failedDuels: Record<string, string[]>; // itemId -> userId[] (legacy, kept for server compat)
   votes: Record<string, { up: string[]; down: string[] }>; // itemId -> { up: userId[], down: userId[] }
+  isPremium: boolean;
 };
 
 export type DuelResult = {
@@ -316,6 +317,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     sock.on('connect_error', (err) => {
       console.error('[socket] connect error:', err.message);
     });
+
+    // When the user completes a purchase, tell the server to re-check and
+    // unlock premium for the whole room.
+    const onEntitlementCreate = () => {
+      sock.emit('CLAIM_PREMIUM');
+    };
+    discord.discordSdk.subscribe('ENTITLEMENT_CREATE', onEntitlementCreate);
 
     setSocket(sock);
     socketRef.current = sock;

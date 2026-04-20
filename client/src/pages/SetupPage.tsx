@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGame, type Tier } from '@/context/GameContext';
+import { useDiscord } from '@/context/DiscordContext';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel, SectionLabel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
 import { TierMakerBrowser, type TierMakerTemplateItem } from '@/components/TierMakerBrowser';
 import { cn, getItemSrc } from '@/lib/utils';
 import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
-import { MAX_ITEMS, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH, Z } from '@/lib/constants';
+import { MAX_ITEMS, MAX_ITEMS_PREMIUM, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, MAX_TITLE_LENGTH, Z } from '@/lib/constants';
 import { ImageIcon, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 import { SetupBackground } from '@/components/ui/SetupBackground';
@@ -185,8 +186,21 @@ function TierMakerModal({
 // SetupPage — all config lives in local state until Start Game
 // ---------------------------------------------------------------------------
 
+const PREMIUM_SKU_ID = import.meta.env.VITE_DISCORD_PREMIUM_SKU_ID as string;
+
 export function SetupPage() {
   const { roomState, socket, currentUserId, isHost } = useGame();
+  const discord = useDiscord();
+  const effectiveLimit = roomState?.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
+
+  async function handleSupportUs() {
+    if (discord.status !== 'ready') return;
+    try {
+      await discord.discordSdk.commands.startPurchase({ sku_id: PREMIUM_SKU_ID });
+    } catch {
+      // User cancelled or purchase failed — no action needed
+    }
+  }
 
   // Form state — host only, never synced to server until submission
   const [title, setTitle] = useState('');
@@ -274,13 +288,13 @@ export function SetupPage() {
       try {
         const imageId = await uploadImage(file);
         setItems((prev) => {
-          if (Object.keys(prev).length >= MAX_ITEMS) {
-            setSetupError(`Item limit reached (max ${MAX_ITEMS}).`);
+          if (Object.keys(prev).length >= effectiveLimit) {
+            setSetupError(`Item limit reached (max ${effectiveLimit}).`);
             return prev;
           }
           return { ...prev, [imageId]: { id: imageId, kind: 'upload' as const, imageUrl: '', text: '', fileName: file.name } };
         });
-        setBankItemIds((prev) => (prev.length < MAX_ITEMS ? [...prev, imageId] : prev));
+        setBankItemIds((prev) => (prev.length < effectiveLimit ? [...prev, imageId] : prev));
       } catch (err) {
         setSetupError(err instanceof Error ? err.message : `"${file.name}" failed to upload.`);
       }
@@ -310,11 +324,11 @@ export function SetupPage() {
     if (labels.length === 0) return;
 
     const currentCount = Object.keys(items).length;
-    if (currentCount >= MAX_ITEMS) return;
+    if (currentCount >= effectiveLimit) return;
 
     const newEntries: LocalItem[] = [];
     for (const label of labels) {
-      if (currentCount + newEntries.length >= MAX_ITEMS) break;
+      if (currentCount + newEntries.length >= effectiveLimit) break;
       const id = crypto.randomUUID();
       newEntries.push({ id, kind: 'text', imageUrl: '', text: label, fileName: label });
     }
@@ -330,11 +344,11 @@ export function SetupPage() {
 
   function loadTemplate(loaded: Array<{ kind: 'tiermaker'; imageUrl: string; fileName: string }>) {
     const currentCount = Object.keys(items).length;
-    if (currentCount >= MAX_ITEMS) return;
+    if (currentCount >= effectiveLimit) return;
 
     const newEntries: LocalItem[] = [];
     for (const item of loaded) {
-      if (currentCount + newEntries.length >= MAX_ITEMS) break;
+      if (currentCount + newEntries.length >= effectiveLimit) break;
       const id = crypto.randomUUID();
       newEntries.push({ id, kind: 'tiermaker', imageUrl: item.imageUrl, text: '', fileName: item.fileName });
     }
@@ -444,7 +458,18 @@ export function SetupPage() {
               <Panel className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <SectionLabel>Images</SectionLabel>
-                  <span className="text-xs font-bold text-white/40">{itemCount} / {MAX_ITEMS}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white/40">{itemCount} / {effectiveLimit}</span>
+                    {!roomState?.isPremium && (
+                      <button
+                        onClick={handleSupportUs}
+                        className="text-xs font-bold text-game-purple-light hover:text-white transition-colors px-2 py-0.5 rounded-lg hover:bg-white/10"
+                        title="Unlock 2000 items"
+                      >
+                        ⭐ Support
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div
@@ -469,7 +494,7 @@ export function SetupPage() {
                     variant="ghost"
                     size="sm"
                     className="flex-1"
-                    disabled={uploading || itemCount >= MAX_ITEMS}
+                    disabled={uploading || itemCount >= effectiveLimit}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     {uploading
@@ -480,7 +505,7 @@ export function SetupPage() {
                     variant="primary"
                     size="sm"
                     className="flex-1"
-                    disabled={itemCount >= MAX_ITEMS}
+                    disabled={itemCount >= effectiveLimit}
                     onClick={() => setShowTierMaker(true)}
                   >
                     <Gamepad2 className="text-purple-400 inline mr-1.5" size={14} />TierMaker
@@ -511,7 +536,7 @@ export function SetupPage() {
                     <GameButton
                       variant="ghost"
                       size="sm"
-                      disabled={textInput.trim().length === 0 || itemCount >= MAX_ITEMS}
+                      disabled={textInput.trim().length === 0 || itemCount >= effectiveLimit}
                       onClick={addTextItems}
                     >
                       Add
