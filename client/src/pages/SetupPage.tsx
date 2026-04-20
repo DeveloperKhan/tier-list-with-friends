@@ -396,7 +396,7 @@ export function SetupPage() {
           style={{ height: 'calc(4px + env(safe-area-inset-top))' }}
         />
 
-        <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm">
+        <header className="flex-none flex items-center justify-between px-5 py-3 border-b border-white/10 bg-game-bg/80 backdrop-blur-sm relative" style={{ zIndex: Z.header }}>
           <div className="flex items-center gap-3">
             <img src={logoUrl} alt="Logo" className="h-8 w-8 rounded-lg" />
             <div>
