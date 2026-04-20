@@ -186,7 +186,7 @@ function TierMakerModal({
 // SetupPage — all config lives in local state until Start Game
 // ---------------------------------------------------------------------------
 
-const PREMIUM_SKU_ID = import.meta.env.VITE_DISCORD_PREMIUM_SKU_ID as string;
+const PREMIUM_SKU_ID = '1495582581889171467';
 
 export function SetupPage() {
   const { roomState, socket, currentUserId, isHost } = useGame();
