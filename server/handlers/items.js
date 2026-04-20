@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { getRoom, setRoom, getSocketInfo } from "../store.js";
 import { sanitizeItem } from "../lib/sanitize.js";
-import { MAX_ITEMS } from "../lib/constants.js";
+import { MAX_ITEMS, MAX_ITEMS_PREMIUM } from "../lib/constants.js";
 
 export function registerItemHandlers(io, socket) {
   // ── LOCK_ITEM ─────────────────────────────────────────────────────────────
@@ -122,8 +122,9 @@ export function registerItemHandlers(io, socket) {
       socket.emit("UPLOAD_REJECTED", { reason: "Invalid image ID." });
       return;
     }
-    if (Object.keys(room.items).length >= MAX_ITEMS) {
-      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${MAX_ITEMS}-item limit.` });
+    const itemLimit = room.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
+    if (Object.keys(room.items).length >= itemLimit) {
+      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${itemLimit}-item limit.` });
       return;
     }
 
@@ -150,8 +151,9 @@ export function registerItemHandlers(io, socket) {
     if (!room || room.phase !== "PLAYING") return;
 
     if (typeof text !== "string" || !text.trim()) return;
-    if (Object.keys(room.items).length >= MAX_ITEMS) {
-      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${MAX_ITEMS}-item limit.` });
+    const itemLimit = room.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
+    if (Object.keys(room.items).length >= itemLimit) {
+      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${itemLimit}-item limit.` });
       return;
     }
 
@@ -180,11 +182,12 @@ export function registerItemHandlers(io, socket) {
     if (!room || room.phase !== "PLAYING") return;
     if (!Array.isArray(incoming)) return;
 
+    const itemLimit = room.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
     const total = incoming.length;
     let loaded = 0;
 
     for (const rawItem of incoming) {
-      if (Object.keys(room.items).length >= MAX_ITEMS) break;
+      if (Object.keys(room.items).length >= itemLimit) break;
 
       const result = sanitizeItem({ ...rawItem, id: randomUUID() }, info.userId);
       if (!result) continue;
@@ -198,7 +201,7 @@ export function registerItemHandlers(io, socket) {
       socket.emit("LOAD_TEMPLATE_PARTIAL", {
         loaded,
         total,
-        reason: `Only ${loaded} of ${total} images fit within the ${MAX_ITEMS}-item limit.`,
+        reason: `Only ${loaded} of ${total} images fit within the ${itemLimit}-item limit.`,
       });
     }
 

@@ -8,7 +8,8 @@ import {
   getReconcileTimer, setReconcileTimer, deleteReconcileTimer,
 } from "../store.js";
 import { sanitizeTier, sanitizeItem } from "../lib/sanitize.js";
-import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS, MAX_ROOM_MS } from "../lib/constants.js";
+import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS, MAX_ITEMS_PREMIUM, MAX_ROOM_MS } from "../lib/constants.js";
+import { hasPremiumEntitlement } from "../lib/entitlements.js";
 
 function createRoom(instanceId, hostId) {
   return {
@@ -23,6 +24,7 @@ function createRoom(instanceId, hostId) {
     failedDuels: {},
     votes: {},
     nextParticipantIndex: 0,
+    isPremium: false,
   };
 }
 
@@ -70,6 +72,16 @@ export function registerRoomHandlers(io, socket) {
         ? room.participants[userId].index
         : room.nextParticipantIndex++,
     };
+
+    // Room-level premium is sticky: once any participant unlocks it, it stays.
+    if (!room.isPremium) {
+      const premium = await hasPremiumEntitlement(userId);
+      if (premium) {
+        room.isPremium = true;
+        console.log(`[room:${instanceId}] premium unlocked by ${username}`);
+      }
+    }
+
     await setRoom(instanceId, room);
 
     io.to(instanceId).emit("STATE_UPDATE", room);
@@ -119,9 +131,15 @@ export function registerRoomHandlers(io, socket) {
     const sanitisedItems = {};
     const sanitisedBankIds = [];
 
+    // Re-check premium at game start in case it wasn't set during SETUP phase.
+    if (!room.isPremium) {
+      room.isPremium = await hasPremiumEntitlement(info.userId);
+    }
+    const itemLimit = room.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
+
     if (Array.isArray(bankItemIds) && typeof items === "object" && items !== null) {
       for (const id of bankItemIds) {
-        if (sanitisedBankIds.length >= MAX_ITEMS) break;
+        if (sanitisedBankIds.length >= itemLimit) break;
         const raw = items[id];
         if (!raw) continue;
 

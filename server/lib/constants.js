@@ -1,5 +1,6 @@
 export const MAX_PLAYERS = 30;
 export const MAX_ITEMS = 300;
+export const MAX_ITEMS_PREMIUM = 2000;
 export const MAX_IMAGE_BYTES = 200_000; // ~150 KB base64 encoded
 export const GRACE_MS = 30_000;
 export const MAX_ROOM_MS = 8 * 60 * 60 * 1000; // 8 hours
