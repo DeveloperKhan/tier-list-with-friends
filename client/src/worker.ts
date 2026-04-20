@@ -135,7 +135,13 @@ export default {
       if (body.byteLength > MAX_EXPORT_BYTES) {
         return Response.json({ error: 'Export image too large (max 5 MB).' }, { status: 413 });
       }
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(body)));
+      const bytes = new Uint8Array(body);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      const b64 = btoa(binary);
       const form = new FormData();
       form.append('key', env.VITE_IMGBB_API_KEY);
       form.append('image', b64);
