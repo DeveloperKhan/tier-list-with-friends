@@ -35,11 +35,17 @@ async function getBrowser() {
   if (browser?.isConnected()) return browser;
   if (!_browserLaunchPromise) {
     _browserLaunchPromise = (async () => {
-      const executablePath = await sparticuzChromium.executablePath();
+      const isLinux = process.platform === 'linux';
       // --single-process is fine for Lambda but kills the whole browser if any
       // page crashes in a persistent server — remove it.
-      const args = sparticuzChromium.args.filter(a => a !== '--single-process');
-      const b = await chromium.launch({ args, executablePath, headless: true });
+      const launchOptions = isLinux
+        ? {
+            args: sparticuzChromium.args.filter(a => a !== '--single-process'),
+            executablePath: await sparticuzChromium.executablePath(),
+            headless: true,
+          }
+        : { headless: true };
+      const b = await chromium.launch(launchOptions);
       browser = b;
       return b;
     })().finally(() => { _browserLaunchPromise = null; });
