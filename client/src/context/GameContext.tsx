@@ -8,6 +8,7 @@ import React, {
 import { io, type Socket } from 'socket.io-client';
 import * as msgpackParser from 'socket.io-msgpack-parser';
 import { useDiscord } from './DiscordContext';
+import i18n from '@/i18n';
 
 // ---------------------------------------------------------------------------
 // Shared types — mirrors server-side RoomState
@@ -260,16 +261,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    sock.on('CONNECTION_REJECTED', ({ reason }: { reason: string }) => {
-      setRejectionReason(reason);
+    sock.on('CONNECTION_REJECTED', ({ key, params }: { key: string; params?: Record<string, unknown> }) => {
+      setRejectionReason(i18n.t(key, params));
     });
 
-    sock.on('UPLOAD_REJECTED', ({ reason }: { reason: string }) => {
-      console.warn('[game] upload rejected:', reason);
+    sock.on('UPLOAD_REJECTED', ({ key, params }: { key: string; params?: Record<string, unknown> }) => {
+      console.warn('[game] upload rejected:', key, params);
     });
 
-    sock.on('LOAD_TEMPLATE_PARTIAL', ({ loaded, total, reason }: { loaded: number; total: number; reason: string }) => {
-      console.warn(`[game] template partially loaded (${loaded}/${total}):`, reason);
+    sock.on('LOAD_TEMPLATE_PARTIAL', ({ key, params }: { key: string; params?: Record<string, unknown> }) => {
+      console.warn('[game] template partially loaded:', key, params);
     });
 
     sock.on('LOCK_REJECTED', ({ itemId, lockedBy }: { itemId: string; lockedBy: string }) => {
@@ -279,7 +280,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     sock.on('PHASE_RESET', ({ reason }: { reason?: string } = {}) => {
       setRoomState(null);
       setSessionEnded(true);
-      setSessionEndReason(reason === 'timeout' ? 'The session was automatically closed after 8 hours.' : null);
+      setSessionEndReason(reason === 'timeout' ? 'timeout' : null);
       setCursors({});
     });
 

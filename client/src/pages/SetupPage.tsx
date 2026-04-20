@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useGame, type Tier } from '@/context/GameContext';
 import { useDiscord } from '@/context/DiscordContext';
 import { GameButton } from '@/components/ui/GameButton';
@@ -11,6 +12,7 @@ import { MAX_ITEMS, MAX_ITEMS_PREMIUM, MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENG
 import { ImageIcon, FolderOpen, Gamepad2 } from 'lucide-react';
 import logoUrl from '/assets/square-logo.svg';
 import { SetupBackground } from '@/components/ui/SetupBackground';
+import { LanguageSelector } from '@/components/ui/LanguageSelector';
 
 // ---------------------------------------------------------------------------
 // Local-only types (never sent to server until Start Game)
@@ -60,6 +62,7 @@ interface TierRowProps {
 }
 
 function TierRow({ tier, index, total, onChange, onDelete, onMove }: TierRowProps) {
+  const { t } = useTranslation();
   const colorRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -68,7 +71,7 @@ function TierRow({ tier, index, total, onChange, onDelete, onMove }: TierRowProp
         <div
           className="h-8 w-8 rounded-lg border-2 border-white/20 shadow-inner transition-transform hover:scale-110 cursor-pointer"
           style={{ backgroundColor: tier.color }}
-          title="Change colour"
+          title={t('setup.changeColour')}
         />
         <input
           ref={colorRef}
@@ -125,16 +128,17 @@ function ImageGrid({
   onRemove: (id: string) => void;
   onClearAll: () => void;
 }) {
+  const { t } = useTranslation();
   if (bankItemIds.length === 0) return null;
   return (
     <div className="mt-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold text-white/40">{bankItemIds.length} item{bankItemIds.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs font-bold text-white/40">{t('setup.imageGridCount', { count: bankItemIds.length })}</span>
         <button
           onClick={onClearAll}
           className="text-xs font-bold text-game-red/70 hover:text-game-red transition-colors px-2 py-0.5 rounded-lg hover:bg-game-red/10"
         >
-          Clear all
+          {t('setup.clearAll')}
         </button>
       </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2">
@@ -189,6 +193,7 @@ function TierMakerModal({
 const PREMIUM_SKU_ID = '1495582581889171467';
 
 export function SetupPage() {
+  const { t } = useTranslation();
   const { roomState, socket, currentUserId, isHost } = useGame();
   const discord = useDiscord();
   const effectiveLimit = roomState?.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
@@ -271,7 +276,7 @@ export function SetupPage() {
   function addTier() {
     setTiers((prev) => {
       if (prev.length >= MAX_TIERS) {
-        setSetupError(`Tier limit reached (max ${MAX_TIERS}).`);
+        setSetupError(t('setup.tierLimitReached', { max: MAX_TIERS }));
         return prev;
       }
       return [...prev, { id: crypto.randomUUID(), label: 'New', color: TIER_PALETTE[prev.length % TIER_PALETTE.length], itemIds: [] }];
@@ -289,14 +294,14 @@ export function SetupPage() {
         const imageId = await uploadImage(file);
         setItems((prev) => {
           if (Object.keys(prev).length >= effectiveLimit) {
-            setSetupError(`Item limit reached (max ${effectiveLimit}).`);
+            setSetupError(t('setup.itemLimitReached', { max: effectiveLimit }));
             return prev;
           }
           return { ...prev, [imageId]: { id: imageId, kind: 'upload' as const, imageUrl: '', text: '', fileName: file.name } };
         });
         setBankItemIds((prev) => (prev.length < effectiveLimit ? [...prev, imageId] : prev));
       } catch (err) {
-        setSetupError(err instanceof Error ? err.message : `"${file.name}" failed to upload.`);
+        setSetupError(err instanceof Error ? err.message : t('setup.fileUploadFailed', { name: file.name }));
       }
     }
     setUploading(false);
@@ -365,10 +370,10 @@ export function SetupPage() {
 
   function handleStartGame() {
     setSetupError(null);
-    const emptyTier = tiers.find((t) => !t.label.trim());
-    if (emptyTier) { setSetupError('All tiers must have a name.'); return; }
-    if (tiers.length > MAX_TIERS) { setSetupError(`Too many tiers (max ${MAX_TIERS}).`); return; }
-    if (bankItemIds.length === 0) { setSetupError('Add at least one item before starting.'); return; }
+    const emptyTier = tiers.find((tier) => !tier.label.trim());
+    if (emptyTier) { setSetupError(t('setup.allTiersMustHaveName')); return; }
+    if (tiers.length > MAX_TIERS) { setSetupError(t('setup.tooManyTiers', { max: MAX_TIERS })); return; }
+    if (bankItemIds.length === 0) { setSetupError(t('setup.addAtLeastOneItem')); return; }
     setIsStarting(true);
     socket?.emit('START_GAME', {
       instanceId: roomState?.instanceId,
@@ -395,15 +400,18 @@ export function SetupPage() {
           <div className="flex items-center gap-3">
             <img src={logoUrl} alt="Logo" className="h-8 w-8 rounded-lg" />
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-game-purple-light">Setup</p>
-              <h1 className="text-lg font-black text-white leading-tight">Tier Lists with Friends</h1>
+              <p className="text-xs font-black uppercase tracking-widest text-game-purple-light">{t('setup.tabLabel')}</p>
+              <h1 className="text-lg font-black text-white leading-tight">{t('setup.title')}</h1>
             </div>
           </div>
-          <PlayerList
-            participants={roomState.participants}
-            hostId={roomState.hostId}
-            currentUserId={currentUserId}
-          />
+          <div className="flex items-center gap-2">
+            <LanguageSelector />
+            <PlayerList
+              participants={roomState.participants}
+              hostId={roomState.hostId}
+              currentUserId={currentUserId}
+            />
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto game-scroll px-4 py-5">
@@ -412,10 +420,10 @@ export function SetupPage() {
             {/* ── Title ───────────────────────────────────────────────── */}
             {isHost ? (
               <Panel className="p-4">
-                <SectionLabel className="mb-2">What are we ranking?</SectionLabel>
+                <SectionLabel className="mb-2">{t('setup.whatAreWeRanking')}</SectionLabel>
                 <input
                   type="text"
-                  placeholder="e.g. Best Pokémon of Gen 1…"
+                  placeholder={t('setup.titlePlaceholder')}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={MAX_TITLE_LENGTH}
@@ -425,7 +433,7 @@ export function SetupPage() {
             ) : (
               <Panel className="p-4 text-center">
                 <p className="text-sm font-bold text-white/50">
-                  Waiting for the host to configure the game…
+                  {t('setup.waitingForHost')}
                 </p>
               </Panel>
             )}
@@ -433,7 +441,7 @@ export function SetupPage() {
             {/* ── Tiers (host only) ────────────────────────────────────── */}
             {isHost && (
               <Panel className="p-4">
-                <SectionLabel className="mb-3">Tiers</SectionLabel>
+                <SectionLabel className="mb-3">{t('setup.tiersSection')}</SectionLabel>
                 <div className="space-y-2">
                   {tiers.map((tier, i) => (
                     <TierRow
@@ -448,7 +456,7 @@ export function SetupPage() {
                   ))}
                 </div>
                 <GameButton variant="ghost" size="sm" className="mt-3 w-full" onClick={addTier}>
-                  + Add Tier
+                  {t('setup.addTier')}
                 </GameButton>
               </Panel>
             )}
@@ -457,20 +465,20 @@ export function SetupPage() {
             {isHost && (
               <Panel className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <SectionLabel>Images</SectionLabel>
+                  <SectionLabel>{t('setup.imagesSection')}</SectionLabel>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white/40">{itemCount} / {effectiveLimit}</span>
+                    <span className="text-xs font-bold text-white/40">{t('setup.itemCount', { count: itemCount, limit: effectiveLimit })}</span>
                     {!roomState?.isPremium && (
                       <div className="relative group/tip">
                         <button
                           onClick={handleSupportUs}
                           className="text-xs font-bold text-game-purple-light hover:text-white transition-colors px-2 py-0.5 rounded-lg hover:bg-white/10"
                         >
-                          ⭐ Support for more slots
+                          {t('app.supportButton')}
                         </button>
                         <div className="pointer-events-none absolute bottom-full right-0 mb-2 w-64 opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150" style={{ zIndex: Z.modal }}>
                           <div className="rounded-xl border border-white/15 bg-game-bg/95 backdrop-blur-sm px-3 py-2.5 text-xs text-white/80 shadow-xl">
-                            Help support the server costs for this activity. Upgrades image slots per session from 300 to 2000! More upgrades coming soon...
+                            {t('app.supportDescription')}
                           </div>
                           <div className="absolute right-3 top-full h-2 w-2 -translate-y-1/2 rotate-45 border-b border-r border-white/15 bg-game-bg/95" />
                         </div>
@@ -491,8 +499,8 @@ export function SetupPage() {
                   )}
                 >
                   <ImageIcon className="text-indigo-400 mx-auto mb-1" size={28} />
-                  <p className="text-sm font-bold text-white/60">Drop images here</p>
-                  <p className="text-xs text-white/30 mt-0.5">or use the buttons below</p>
+                  <p className="text-sm font-bold text-white/60">{t('setup.dropImagesHere')}</p>
+                  <p className="text-xs text-white/30 mt-0.5">{t('setup.orUseButtonsBelow')}</p>
                   <p className="text-xs text-white/20 mt-1">{ACCEPTED_LABEL}</p>
                 </div>
 
@@ -505,8 +513,8 @@ export function SetupPage() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     {uploading
-                      ? 'Uploading…'
-                      : <><FolderOpen className="text-amber-400 inline mr-1.5" size={14} />Upload Files</>}
+                      ? t('setup.uploading')
+                      : <><FolderOpen className="text-amber-400 inline mr-1.5" size={14} />{t('setup.uploadFiles')}</>}
                   </GameButton>
                   <GameButton
                     variant="primary"
@@ -515,7 +523,7 @@ export function SetupPage() {
                     disabled={itemCount >= effectiveLimit}
                     onClick={() => setShowTierMaker(true)}
                   >
-                    <Gamepad2 className="text-purple-400 inline mr-1.5" size={14} />TierMaker
+                    <Gamepad2 className="text-purple-400 inline mr-1.5" size={14} />{t('setup.tierMaker')}
                   </GameButton>
                 </div>
 
@@ -529,7 +537,7 @@ export function SetupPage() {
                 />
 
                 <div className="mt-3">
-                  <p className="text-xs font-bold text-white/40 mb-1.5">Or add text items (comma-separated)</p>
+                  <p className="text-xs font-bold text-white/40 mb-1.5">{t('setup.textItemsLabel')}</p>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -537,7 +545,7 @@ export function SetupPage() {
                       onChange={(e) => setTextInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') addTextItems(); }}
                       maxLength={MAX_TEXT_ITEM_LENGTH}
-                      placeholder="e.g. Dog, Cat, Fish"
+                      placeholder={t('setup.textItemsPlaceholder')}
                       className="game-input flex-1 text-sm"
                     />
                     <GameButton
@@ -546,7 +554,7 @@ export function SetupPage() {
                       disabled={textInput.trim().length === 0 || itemCount >= effectiveLimit}
                       onClick={addTextItems}
                     >
-                      Add
+                      {t('setup.addTextItems')}
                     </GameButton>
                   </div>
                 </div>
@@ -573,14 +581,14 @@ export function SetupPage() {
                 {isStarting ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Starting…
+                    {t('setup.starting')}
                   </span>
-                ) : 'Start Game!'}
+                ) : t('setup.startGame')}
               </GameButton>
               </>) : (
               <Panel className="p-4 text-center">
                 <p className="text-sm font-bold text-white/50">
-                  Waiting for the host to start the game…
+                  {t('setup.waitingForHostToStart')}
                 </p>
               </Panel>
             )}

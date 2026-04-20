@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { Participant } from '@/context/GameContext';
 import { Users, Crown } from 'lucide-react';
@@ -10,7 +11,6 @@ interface PlayerListProps {
   className?: string;
 }
 
-/** Generates a deterministic pastel colour from a userId string */
 function userColor(userId: string): string {
   const palette = [
     '#f472b6', '#fb923c', '#facc15', '#4ade80',
@@ -55,10 +55,10 @@ export function PlayerList({
   currentUserId,
   className,
 }: PlayerListProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const playerList = Object.values(participants).sort((a, b) => {
-    // Host always first
     if (a.userId === hostId) return -1;
     if (b.userId === hostId) return 1;
     return a.username.localeCompare(b.username);
@@ -68,7 +68,6 @@ export function PlayerList({
 
   return (
     <div className={cn('relative z-50', className)}>
-      {/* Toggle button */}
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -89,12 +88,11 @@ export function PlayerList({
         </span>
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div className="absolute right-0 top-full mt-2 w-56 animate-bounce-in overflow-hidden rounded-2xl border-2 border-game-border bg-game-panel shadow-2xl">
           <div className="border-b border-white/10 px-4 py-2.5">
             <p className="text-xs font-black uppercase tracking-wider text-game-purple-light">
-              Players in session
+              {t('playerList.playersInSession')}
             </p>
           </div>
           <ul className="max-h-64 overflow-y-auto game-scroll py-2">
@@ -108,12 +106,14 @@ export function PlayerList({
                   <p className="truncate text-sm font-bold text-white">
                     {p.username}
                     {p.userId === currentUserId && (
-                      <span className="ml-1 text-xs font-normal text-white/40">(you)</span>
+                      <span className="ml-1 text-xs font-normal text-white/40">{t('playerList.you')}</span>
                     )}
                   </p>
                 </div>
                 {p.userId === hostId && (
-                  <span title="Host" className="flex-shrink-0"><Crown className="text-yellow-400" size={16} /></span>
+                  <span title={t('playerList.hostTitle')} className="flex-shrink-0">
+                    <Crown className="text-yellow-400" size={16} />
+                  </span>
                 )}
               </li>
             ))}

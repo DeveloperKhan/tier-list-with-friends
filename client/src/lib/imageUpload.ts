@@ -1,3 +1,5 @@
+import i18n from '@/i18n';
+
 const MAX_DIM = 120;
 const QUALITY = 0.85;
 // Safety cap after preprocessing — 100KB is generous for a 120px WebP tile
@@ -36,10 +38,12 @@ async function preprocessImage(file: File): Promise<Blob> {
 /** Resize, recompress, then upload to R2 via the Worker. Returns the imageId. */
 export async function uploadImage(file: File): Promise<string> {
   if (!ACCEPTED_TYPES.has(file.type)) {
-    throw new Error(`"${file.name}" is not supported. Use ${ACCEPTED_LABEL}.`);
+    throw new Error(i18n.t('imageUpload.unsupportedFormat', { name: file.name, formats: ACCEPTED_LABEL }));
   }
   const blob = await preprocessImage(file);
-  if (blob.size > MAX_UPLOAD_BYTES) throw new Error(`"${file.name}" is still too large after processing.`);
+  if (blob.size > MAX_UPLOAD_BYTES) {
+    throw new Error(i18n.t('imageUpload.fileTooLarge', { name: file.name }));
+  }
 
   const res = await fetch('/api/image/upload', {
     method: 'POST',
@@ -48,7 +52,7 @@ export async function uploadImage(file: File): Promise<string> {
   });
   if (!res.ok) {
     const msg = await res.text().catch(() => res.statusText);
-    throw new Error(`Upload failed: ${msg}`);
+    throw new Error(i18n.t('imageUpload.uploadFailed', { message: msg }));
   }
   const { imageId } = (await res.json()) as { imageId: string };
   return imageId;

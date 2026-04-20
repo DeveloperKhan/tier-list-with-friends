@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { GameButton } from '@/components/ui/GameButton';
 import { Gamepad2, CircleCheck, Link, Search } from 'lucide-react';
@@ -30,18 +31,18 @@ function proxyImg(tiermakerUrl: string) {
   return `/api/tiermaker/image?url=${encodeURIComponent(url)}`;
 }
 
-function validateTierMakerUrl(value: string): string | null {
+function validateTierMakerUrl(value: string, t: (key: string) => string): string | null {
   let u: URL;
   try {
     u = new URL(value);
   } catch {
-    return 'Enter a full URL starting with https://tiermaker.com/create/…';
+    return t('tierMakerBrowser.invalidUrlError');
   }
   if (u.hostname !== 'tiermaker.com') {
-    return 'URL must be from tiermaker.com';
+    return t('tierMakerBrowser.wrongDomainError');
   }
   if (!u.pathname.startsWith('/create/')) {
-    return 'Only tiermaker.com/create/… URLs are supported. Open a template on TierMaker and copy the URL from your browser.';
+    return t('tierMakerBrowser.unsupportedUrlError');
   }
   return null;
 }
@@ -58,6 +59,7 @@ interface TierMakerBrowserProps {
 }
 
 export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>('url');
 
   // URL mode state
@@ -95,7 +97,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
     e.preventDefault();
     const trimmed = urlInput.trim();
     if (!trimmed) return;
-    const validationError = validateTierMakerUrl(trimmed);
+    const validationError = validateTierMakerUrl(trimmed, t);
     if (validationError) {
       setUrlError(validationError);
       return;
@@ -155,7 +157,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-black text-white flex items-center gap-2">
             <Gamepad2 className="text-purple-400" size={16} />
-            TierMaker Templates
+            {t('tierMakerBrowser.title')}
           </h2>
           {onClose && (
             <button
@@ -179,7 +181,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
             )}
           >
             <Link size={12} />
-            Paste URL
+            {t('tierMakerBrowser.pasteUrlTab')}
           </button>
           <button
             onClick={() => switchMode('explore')}
@@ -191,7 +193,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
             )}
           >
             <Search size={12} />
-            Explore
+            {t('tierMakerBrowser.exploreTab')}
           </button>
         </div>
 
@@ -203,7 +205,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
                 type="text"
                 value={urlInput}
                 onChange={(e) => { setUrlInput(e.target.value); setUrlError(''); }}
-                placeholder="https://tiermaker.com/create/…"
+                placeholder={t('tierMakerBrowser.urlPlaceholder')}
                 className="game-input flex-1 text-sm py-2"
               />
               <GameButton
@@ -212,12 +214,12 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
                 size="sm"
                 disabled={templateState === 'loading'}
               >
-                {templateState === 'loading' ? '…' : 'Load'}
+                {templateState === 'loading' ? t('tierMakerBrowser.loadingEllipsis') : t('tierMakerBrowser.loadButton')}
               </GameButton>
             </div>
             {urlError
               ? <p className="text-xs text-game-red">{urlError}</p>
-              : <p className="text-xs text-white/30">Paste a <span className="text-white/50 font-mono">tiermaker.com/create/…</span> URL from your browser</p>
+              : <p className="text-xs text-white/30">{t('tierMakerBrowser.pasteUrlHint')}</p>
             }
           </form>
         )}
@@ -229,7 +231,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search templates…"
+              placeholder={t('tierMakerBrowser.searchPlaceholder')}
               className="game-input flex-1 text-sm py-2"
             />
             <GameButton
@@ -238,7 +240,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
               size="sm"
               disabled={searchState === 'loading'}
             >
-              {searchState === 'loading' ? '…' : 'Search'}
+              {searchState === 'loading' ? t('tierMakerBrowser.loadingEllipsis') : t('tierMakerBrowser.searchButton')}
             </GameButton>
           </form>
         )}
@@ -250,7 +252,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
         <div className="flex-1 flex flex-col overflow-hidden">
           {templateState === 'idle' && (
             <p className="p-6 text-sm text-white/40">
-              Paste any tiermaker.com URL above to load its images.
+              {t('tierMakerBrowser.pasteUrlPrompt')}
             </p>
           )}
           {templateState === 'loading' && (
@@ -270,7 +272,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
         <div className="flex flex-1 overflow-hidden">
           <div className="w-56 flex-none border-r border-white/10 overflow-y-auto game-scroll">
             {searchState === 'idle' && (
-              <p className="p-4 text-xs text-white/40">Enter a search term above.</p>
+              <p className="p-4 text-xs text-white/40">{t('tierMakerBrowser.enterSearchPrompt')}</p>
             )}
             {searchState === 'error' && (
               <p className="p-4 text-xs text-game-red">{searchError}</p>
@@ -281,7 +283,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
               </div>
             )}
             {searchState === 'done' && results.length === 0 && (
-              <p className="p-4 text-xs text-white/40">No results found.</p>
+              <p className="p-4 text-xs text-white/40">{t('tierMakerBrowser.noResults')}</p>
             )}
             {results.map((r) => (
               <button
@@ -303,7 +305,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
                 )}
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold text-white">{r.name}</p>
-                  <p className="text-xs text-white/40">{r.imageCount} images</p>
+                  <p className="text-xs text-white/40">{t('tierMakerBrowser.imageCount', { count: r.imageCount })}</p>
                 </div>
               </button>
             ))}
@@ -311,7 +313,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
 
           <div className="flex-1 flex flex-col overflow-hidden">
             {templateState === 'idle' && searchState === 'done' && (
-              <p className="p-6 text-sm text-white/40">Select a template to preview.</p>
+              <p className="p-6 text-sm text-white/40">{t('tierMakerBrowser.selectTemplatePrompt')}</p>
             )}
             {templateState === 'loading' && (
               <div className="flex justify-center py-12">
@@ -338,6 +340,8 @@ function TemplatePreview({
   selected: Template;
   onLoad?: () => void;
 }) {
+  const { t } = useTranslation();
+
   function proxyImg(tiermakerUrl: string) {
     if (!tiermakerUrl) return '';
     const url = tiermakerUrl.startsWith('/')
@@ -350,7 +354,7 @@ function TemplatePreview({
     <>
       <div className="flex-1 overflow-y-auto game-scroll p-4">
         <p className="text-sm font-black text-white mb-1">{selected.name}</p>
-        <p className="text-xs text-white/40 mb-3">{selected.items.length} items</p>
+        <p className="text-xs text-white/40 mb-3">{t('tierMakerBrowser.itemCount', { count: selected.items.length })}</p>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
           {selected.items.map((item) => (
             <div
@@ -376,7 +380,7 @@ function TemplatePreview({
             onClick={onLoad}
           >
             <CircleCheck className="text-green-400 inline mr-1.5" size={14} />
-            Load {selected.items.length} Images
+            {t('tierMakerBrowser.loadImages', { count: selected.items.length })}
           </GameButton>
         </div>
       )}

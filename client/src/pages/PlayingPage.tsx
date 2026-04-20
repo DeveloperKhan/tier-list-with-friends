@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import squareLogoUrl from '../../assets/square-logo.svg?url';
 import discordLogoUrl from '../../assets/discord-logo.svg?url';
 import {
@@ -29,6 +30,7 @@ import { DuelCutscene } from '@/components/DuelCutscene';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel } from '@/components/ui/Panel';
 import { PlayerList } from '@/components/ui/PlayerList';
+import { LanguageSelector } from '@/components/ui/LanguageSelector';
 import { cn, getItemSrc, discordAvatarUrl } from '@/lib/utils';
 import { uploadImage, ACCEPTED_ACCEPT, ACCEPTED_LABEL } from '@/lib/imageUpload';
 import { MAX_TEXT_ITEM_LENGTH, MAX_TIER_LABEL_LENGTH, MAX_TIERS, Z } from '@/lib/constants';
@@ -261,6 +263,7 @@ function TierDropZone({
 // ---------------------------------------------------------------------------
 
 function AddTextPopup({ onAdd, onClose }: { onAdd: (text: string) => void; onClose: () => void }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -277,7 +280,7 @@ function AddTextPopup({ onAdd, onClose }: { onAdd: (text: string) => void; onClo
         className="w-72 rounded-xl border border-white/10 bg-game-panel p-3 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="mb-2 text-xs font-bold text-white/50">Add text items (comma-separated)</p>
+        <p className="mb-2 text-xs font-bold text-white/50">{t('playing.textItemsPlaceholder')}</p>
         <div className="flex gap-1.5">
           <input
             ref={inputRef}
@@ -286,7 +289,7 @@ function AddTextPopup({ onAdd, onClose }: { onAdd: (text: string) => void; onClo
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
             maxLength={MAX_TEXT_ITEM_LENGTH}
-            placeholder="e.g. Apple, Banana"
+            placeholder={t('playing.textItemsPlaceholderShort')}
             className="game-input flex-1 py-1 text-xs"
           />
           <GameButton variant="primary" size="sm" onClick={submit} disabled={!value.trim()}>
@@ -318,6 +321,7 @@ function BankDropZone({
   onAddText: (text: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'bank' });
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mobileItemsRef = useRef<HTMLDivElement>(null);
@@ -415,10 +419,10 @@ function BankDropZone({
 
   const controls = (
     <div className="flex flex-shrink-0 flex-col gap-1">
-      <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title={`Upload images (${ACCEPTED_LABEL})`}>
+      <GameButton variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} title={t('playing.uploadImages', { formats: ACCEPTED_LABEL })}>
         <Upload size={13} />
       </GameButton>
-      <GameButton variant="ghost" size="sm" onClick={() => setShowTextPopup(true)} title="Add text items">
+      <GameButton variant="ghost" size="sm" onClick={() => setShowTextPopup(true)} title={t('playing.addTextItemsTool')}>
         <Type size={13} />
       </GameButton>
       <input
@@ -470,7 +474,7 @@ function BankDropZone({
                 );
               })}
               {bankItemIds.length === 0 && (
-                <span className="select-none text-xs font-semibold text-white/20">All items placed</span>
+                <span className="select-none text-xs font-semibold text-white/20">{t('playing.allItemsPlaced')}</span>
               )}
             </div>
           </div>
@@ -549,7 +553,7 @@ function BankDropZone({
 
         {bankItemIds.length === 0 && (
           <span className="select-none text-xs font-semibold text-white/20">
-            All items placed
+            {t('playing.allItemsPlaced')}
           </span>
         )}
       </div>
@@ -581,6 +585,7 @@ function EditTiersModal({
   onSave: (tiers: LocalTier[]) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [localTiers, setLocalTiers] = useState<LocalTier[]>(
     () => tiers.map(({ id, label, color }) => ({ id, label, color })),
   );
@@ -588,7 +593,7 @@ function EditTiersModal({
 
   function handleAdd() {
     if (localTiers.length >= MAX_TIERS) {
-      setModalError(`Tier limit reached (max ${MAX_TIERS}).`);
+      setModalError(t('setup.tierLimitReached', { max: MAX_TIERS }));
       return;
     }
     setModalError(null);
@@ -625,7 +630,7 @@ function EditTiersModal({
     <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <Panel className="flex w-full max-w-sm flex-col gap-3 p-5">
         <div className="flex items-center justify-between">
-          <span className="font-black text-white">Edit Tiers</span>
+          <span className="font-black text-white">{t('playing.editTiers')}</span>
           <button
             onClick={onClose}
             className="text-white/40 hover:text-white/80 transition-colors text-lg leading-none"
@@ -648,7 +653,7 @@ function EditTiersModal({
                   value={tier.color}
                   onChange={(e) => handleRecolor(tier.id, e.target.value)}
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  title="Change color"
+                  title={t('playing.changeColor')}
                 />
               </div>
 
@@ -683,7 +688,7 @@ function EditTiersModal({
               <button
                 onClick={() => handleDelete(tier.id)}
                 className="flex-shrink-0 text-red-400/60 hover:text-red-400 transition-colors"
-                title="Delete tier"
+                title={t('playing.deleteTier')}
               >
                 <Trash2 size={15} />
               </button>
@@ -697,7 +702,7 @@ function EditTiersModal({
           onClick={handleAdd}
           className="w-full justify-center gap-1"
         >
-          <Plus size={14} /> Add Tier
+          <Plus size={14} /> {t('playing.addTier')}
         </GameButton>
 
         {modalError && (
@@ -708,19 +713,19 @@ function EditTiersModal({
 
         <div className="flex gap-2 pt-1 border-t border-white/10">
           <GameButton variant="ghost" size="sm" onClick={onClose} className="flex-1 justify-center">
-            Cancel
+            {t('playing.cancel')}
           </GameButton>
           <GameButton
             variant="success"
             size="sm"
             className="flex-1 justify-center"
             onClick={() => {
-              const empty = localTiers.find((t) => !t.label.trim());
-              if (empty) { setModalError('All tiers must have a name.'); return; }
+              const empty = localTiers.find((tier) => !tier.label.trim());
+              if (empty) { setModalError(t('setup.allTiersMustHaveName')); return; }
               onSave(localTiers);
             }}
           >
-            Save Changes
+            {t('playing.saveChanges')}
           </GameButton>
         </div>
       </Panel>
@@ -737,6 +742,7 @@ function EditTiersModal({
 // ---------------------------------------------------------------------------
 
 function ExportModal({ url, onClose, onOpen }: { url: string; onClose: () => void; onOpen: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -749,10 +755,10 @@ function ExportModal({ url, onClose, onOpen }: { url: string; onClose: () => voi
     <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <Panel className="flex w-full max-w-sm flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
-          <span className="font-black text-white">Export Ready</span>
+          <span className="font-black text-white">{t('playing.exportReady')}</span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors text-lg leading-none">✕</button>
         </div>
-        <p className="text-xs text-white/60">Your tier list has been uploaded. Open or copy the link to save the image.</p>
+        <p className="text-xs text-white/60">{t('playing.exportReadyDescription')}</p>
         <div className="flex gap-1.5">
           <input
             readOnly
@@ -761,10 +767,10 @@ function ExportModal({ url, onClose, onOpen }: { url: string; onClose: () => voi
             onClick={(e) => (e.target as HTMLInputElement).select()}
           />
           <GameButton variant="ghost" size="sm" onClick={handleCopy}>
-            {copied ? '✓' : 'Copy'}
+            {copied ? t('playing.copied') : t('playing.copy')}
           </GameButton>
           <GameButton variant="primary" size="sm" onClick={onOpen}>
-            Open
+            {t('playing.open')}
           </GameButton>
         </div>
       </Panel>
@@ -783,14 +789,15 @@ function EndSessionConfirm({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <Panel className="w-full max-w-xs p-6 text-center space-y-4">
-        <p className="font-black text-white text-lg">End session?</p>
-        <p className="text-sm text-white/60">This will end the game for all players.</p>
+        <p className="font-black text-white text-lg">{t('playing.endSessionTitle')}</p>
+        <p className="text-sm text-white/60">{t('playing.endSessionDescription')}</p>
         <div className="flex gap-3 justify-center">
-          <GameButton variant="ghost" onClick={onCancel}>Cancel</GameButton>
-          <GameButton variant="danger" onClick={onConfirm}>End Session</GameButton>
+          <GameButton variant="ghost" onClick={onCancel}>{t('playing.cancel')}</GameButton>
+          <GameButton variant="danger" onClick={onConfirm}>{t('playing.endSession')}</GameButton>
         </div>
       </Panel>
     </div>
@@ -873,6 +880,7 @@ function spawnConfettiBurst(
 // ---------------------------------------------------------------------------
 
 export function PlayingPage() {
+  const { t } = useTranslation();
   const { roomState, socket, currentUserId, isHost, lockRejected, clearLockRejected, activeDuel, clearActiveDuel, rejectedItemIds } = useGame();
   const discord = useDiscord();
   const [activeItem, setActiveItem] = useState<ImageItem | null>(null);
@@ -957,16 +965,17 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
     if (!lockRejected || !roomState) return;
     setActiveItem(null);
     const name = roomState.participants[lockRejected.lockedBy]?.username ?? 'Someone';
-    setToast(`${name} is already moving that item.`);
+    setToast(t('playing.itemLockedBy', { name }));
     clearLockRejected();
   }, [lockRejected, roomState, clearLockRejected]);
 
   // Surface server-side rejections as toasts
   useEffect(() => {
     if (!socket) return;
-    const onUploadRejected = ({ reason }: { reason: string }) => setToast(reason);
-    const onTemplatePartial = ({ loaded, total }: { loaded: number; total: number }) =>
-      setToast(`Only ${loaded} of ${total} images loaded — room item limit reached.`);
+    const onUploadRejected = ({ key, params }: { key: string; params?: Record<string, unknown> }) =>
+      setToast(t(key, params));
+    const onTemplatePartial = ({ key, params }: { key: string; params?: Record<string, unknown> }) =>
+      setToast(t(key, params));
     socket.on('UPLOAD_REJECTED', onUploadRejected);
     socket.on('LOAD_TEMPLATE_PARTIAL', onTemplatePartial);
     return () => {
@@ -1439,7 +1448,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       setExportUrl(url);
     } catch (err) {
       console.error('[export]', err);
-      setToast('Export failed. Please try again.');
+      setToast(t('playing.exportFailed'));
     }
   }
 
@@ -1462,7 +1471,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
         const imageId = await uploadImage(file);
         socket!.emit('UPLOAD_IMAGE', { imageId, fileName: file.name });
       } catch (err) {
-        setToast(err instanceof Error ? err.message : `"${file.name}" failed to upload.`);
+        setToast(err instanceof Error ? err.message : t('setup.fileUploadFailed', { name: file.name }));
       }
     }
   }
@@ -1493,7 +1502,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
           {/* Header */}
           <header style={{ zIndex: Z.header }} className="relative flex flex-none items-center justify-between gap-3 border-b border-white/10 bg-game-bg/80 px-4 py-2 backdrop-blur-sm">
             <h1 className="min-w-0 truncate text-base font-black text-white">
-              {roomState.title || 'Tier List'}
+              {roomState.title || t('playing.defaultTitle')}
             </h1>
 
             <div className="flex flex-shrink-0 items-center gap-2">
@@ -1501,11 +1510,12 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                 variant={showDrawBar ? 'primary' : 'ghost'}
                 size="sm"
                 onClick={() => setShowDrawBar((v) => !v)}
-                title="Toggle drawing tools"
+                title={t('playing.toggleDrawingTools')}
               >
                 <Pencil size={13} />
-                <span className="hidden sm:inline">Draw</span>
+                <span className="hidden sm:inline">{t('playing.drawTab')}</span>
               </GameButton>
+              <LanguageSelector />
               <PlayerList
                 participants={roomState.participants}
                 hostId={roomState.hostId}
@@ -1519,11 +1529,11 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                     onClick={() => setShowEditTiers(true)}
                   >
                     <Layers size={13} />
-                    <span className="hidden sm:inline">Tiers</span>
+                    <span className="hidden sm:inline">{t('playing.tiersTab')}</span>
                   </GameButton>
                   <GameButton variant="ghost" size="sm" onClick={handleExport}>
                     <Download size={13} />
-                    <span className="hidden sm:inline">Export</span>
+                    <span className="hidden sm:inline">{t('playing.exportButton')}</span>
                   </GameButton>
                   <GameButton
                     variant="danger"
@@ -1531,7 +1541,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                     onClick={() => setShowEndConfirm(true)}
                   >
                     <LogOut size={13} />
-                    <span className="hidden sm:inline">End</span>
+                    <span className="hidden sm:inline">{t('playing.endButton')}</span>
                   </GameButton>
                 </>
               )}
@@ -1587,7 +1597,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
 
               {roomState.tiers.length === 0 && (
                 <div className="flex h-32 items-center justify-center text-sm font-semibold text-white/30">
-                  {isHost ? 'Add tiers using the Tiers button above.' : 'No tiers yet — waiting for the host.'}
+                  {isHost ? t('playing.noTiersHost') : t('playing.noTiersGuest')}
                 </div>
               )}
             </main>
@@ -1636,13 +1646,13 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                 <div
                   className="h-4 w-4 flex-shrink-0 rounded-full border-2 border-white/30"
                   style={{ backgroundColor: drawColor }}
-                  title="Your drawing color"
+                  title={t('playing.yourDrawingColor')}
                 />
                 <div className="h-px w-full bg-white/10" />
                 {/* Grabber */}
                 <button
                   onClick={() => setDrawTool('grab')}
-                  title="Grabber — drag items"
+                  title={t('playing.toolGrabber')}
                   className={cn(
                     'rounded-lg p-1.5 transition-colors',
                     drawTool === 'grab' ? 'bg-purple-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white',
@@ -1653,7 +1663,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                 {/* Pen */}
                 <button
                   onClick={() => setDrawTool('pen')}
-                  title="Pen — draw on the tier list"
+                  title={t('playing.toolPen')}
                   className={cn(
                     'rounded-lg p-1.5 transition-colors',
                     drawTool === 'pen' ? 'bg-purple-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white',
@@ -1664,7 +1674,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                 {/* Confetti */}
                 <button
                   onClick={() => setDrawTool('confetti')}
-                  title="Confetti — click to celebrate!"
+                  title={t('playing.toolConfetti')}
                   className={cn(
                     'rounded-lg p-1.5 transition-colors',
                     drawTool === 'confetti' ? 'bg-purple-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white',
@@ -1676,7 +1686,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                 {/* Clear */}
                 <button
                   onClick={handleClearCanvas}
-                  title="Clear drawings"
+                  title={t('playing.clearDrawings')}
                   className="rounded-lg p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-red-400"
                 >
                   <Eraser size={15} />
@@ -1688,7 +1698,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
                     socket?.emit('SET_DRAWINGS_VISIBLE', { visible: !next });
                     return next;
                   })}
-                  title={drawingsHidden ? 'Show drawings' : 'Hide drawings'}
+                  title={drawingsHidden ? t('playing.showDrawings') : t('playing.hideDrawings')}
                   className={cn(
                     'rounded-lg p-1.5 transition-colors',
                     drawingsHidden ? 'text-white/30 hover:bg-white/10 hover:text-white/60' : 'text-white/50 hover:bg-white/10 hover:text-white',

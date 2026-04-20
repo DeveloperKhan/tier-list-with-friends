@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { getRoom, setRoom, getSocketInfo } from "../store.js";
 import { sanitizeItem } from "../lib/sanitize.js";
 import { MAX_ITEMS, MAX_ITEMS_PREMIUM } from "../lib/constants.js";
+import { msg } from "../lib/messages.js";
 
 export function registerItemHandlers(io, socket) {
   // ── LOCK_ITEM ─────────────────────────────────────────────────────────────
@@ -119,12 +120,12 @@ export function registerItemHandlers(io, socket) {
     if (!room || room.phase !== "PLAYING") return;
 
     if (typeof imageId !== "string" || !/^[0-9a-f-]{36}$/i.test(imageId)) {
-      socket.emit("UPLOAD_REJECTED", { reason: "Invalid image ID." });
+      socket.emit("UPLOAD_REJECTED", msg.invalidImageId());
       return;
     }
     const itemLimit = room.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
     if (Object.keys(room.items).length >= itemLimit) {
-      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${itemLimit}-item limit.` });
+      socket.emit("UPLOAD_REJECTED", msg.itemLimitReached(itemLimit));
       return;
     }
 
@@ -153,7 +154,7 @@ export function registerItemHandlers(io, socket) {
     if (typeof text !== "string" || !text.trim()) return;
     const itemLimit = room.isPremium ? MAX_ITEMS_PREMIUM : MAX_ITEMS;
     if (Object.keys(room.items).length >= itemLimit) {
-      socket.emit("UPLOAD_REJECTED", { reason: `Room is at the ${itemLimit}-item limit.` });
+      socket.emit("UPLOAD_REJECTED", msg.itemLimitReached(itemLimit));
       return;
     }
 
@@ -198,11 +199,7 @@ export function registerItemHandlers(io, socket) {
     }
 
     if (loaded < total) {
-      socket.emit("LOAD_TEMPLATE_PARTIAL", {
-        loaded,
-        total,
-        reason: `Only ${loaded} of ${total} images fit within the ${itemLimit}-item limit.`,
-      });
+      socket.emit("LOAD_TEMPLATE_PARTIAL", msg.templatePartialLoad(loaded, total, itemLimit));
     }
 
     await setRoom(info.instanceId, room);

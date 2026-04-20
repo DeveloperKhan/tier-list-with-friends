@@ -10,6 +10,7 @@ import {
 import { sanitizeTier, sanitizeItem } from "../lib/sanitize.js";
 import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS, MAX_ITEMS_PREMIUM, MAX_ROOM_MS } from "../lib/constants.js";
 import { hasPremiumEntitlement } from "../lib/entitlements.js";
+import { msg } from "../lib/messages.js";
 
 function createRoom(instanceId, hostId) {
   return {
@@ -53,9 +54,7 @@ export function registerRoomHandlers(io, socket) {
     const isReturningUser = !!room.participants[userId];
 
     if (!isReturningUser && Object.keys(room.participants).length >= MAX_PLAYERS) {
-      socket.emit("CONNECTION_REJECTED", {
-        reason: `Room is full (${MAX_PLAYERS} players maximum).`,
-      });
+      socket.emit("CONNECTION_REJECTED", msg.roomFull(MAX_PLAYERS));
       return;
     }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { discordAvatarUrl } from '@/lib/utils';
 import type { DuelResult, Participant } from '@/context/GameContext';
@@ -6,7 +7,6 @@ import { Z } from '@/lib/constants';
 
 const MOVES = ['rock', 'paper', 'scissors'] as const;
 const MOVE_EMOJI: Record<string, string> = { rock: '🪨', paper: '📄', scissors: '✂️' };
-const MOVE_LABEL: Record<string, string> = { rock: 'Rock', paper: 'Paper', scissors: 'Scissors' };
 
 type Phase = 'spinning' | 'revealed';
 
@@ -18,8 +18,15 @@ interface Props {
 }
 
 export function DuelCutscene({ result, participants, currentUserId, onDone }: Props) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>('spinning');
   const [spinIdx, setSpinIdx] = useState(0);
+
+  const MOVE_LABEL: Record<string, string> = {
+    rock: t('duel.rock'),
+    paper: t('duel.paper'),
+    scissors: t('duel.scissors'),
+  };
 
   useEffect(() => {
     let frame = 0;
@@ -52,8 +59,8 @@ export function DuelCutscene({ result, participants, currentUserId, onDone }: Pr
   const iInvolved = isChallenger || isOwner;
 
   const resultLabel = iInvolved
-    ? result.winnerId === currentUserId ? '🎉 You win!' : '💀 You lose!'
-    : `${participants[result.winnerId]?.username ?? 'Someone'} wins!`;
+    ? result.winnerId === currentUserId ? t('duel.youWin') : t('duel.youLose')
+    : t('duel.someoneWins', { name: participants[result.winnerId]?.username ?? 'Someone' });
 
   function MoveSlot({ move, spinning, offset = 0 }: { move: string; spinning: boolean; offset?: number }) {
     const displayIdx = (spinIdx + offset) % 3;
@@ -103,10 +110,8 @@ export function DuelCutscene({ result, participants, currentUserId, onDone }: Pr
   return (
     <div style={{ zIndex: Z.duelCutscene }} className="fixed inset-0 flex items-center justify-center pointer-events-none">
       <div className="pointer-events-auto animate-bounce-in bg-game-bg border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl w-72 text-center backdrop-blur-sm">
-        {/* Header */}
-        <p className="text-white font-black text-sm mb-4 tracking-wide">⚔️ DUEL</p>
+        <p className="text-white font-black text-sm mb-4 tracking-wide">{t('duel.duelTitle')}</p>
 
-        {/* Players */}
         <div className="flex items-center justify-around">
           <PlayerSide
             userId={result.challengerId}
@@ -115,7 +120,7 @@ export function DuelCutscene({ result, participants, currentUserId, onDone }: Pr
             won={challengerWon}
           />
           <div className="flex flex-col items-center gap-1">
-            <span className="text-white/40 font-black text-lg">VS</span>
+            <span className="text-white/40 font-black text-lg">{t('duel.vs')}</span>
           </div>
           <PlayerSide
             userId={result.ownerId}
@@ -125,7 +130,6 @@ export function DuelCutscene({ result, participants, currentUserId, onDone }: Pr
           />
         </div>
 
-        {/* Result banner */}
         <div
           className={cn(
             'mt-4 py-2 rounded-xl font-black text-sm transition-all duration-300',
@@ -142,7 +146,7 @@ export function DuelCutscene({ result, participants, currentUserId, onDone }: Pr
             onClick={onDone}
             className="mt-3 text-white/40 hover:text-white/70 text-xs transition-colors"
           >
-            Close
+            {t('duel.close')}
           </button>
         )}
       </div>
