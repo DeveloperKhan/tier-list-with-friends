@@ -146,7 +146,8 @@
     "ja": "Japonês",
     "es": "Espanhol",
     "pt": "Português",
-    "zh": "Chinês"
+    "zh": "Chinês",
+    "vi": "Vietnamita"
   },
   "server": {
     "roomFull": "Sala cheia (máximo de {{max}} jogadores).",

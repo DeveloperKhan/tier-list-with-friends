@@ -5,6 +5,7 @@ import ja from './ja.json';
 import es from './es.json';
 import pt from './pt.json';
 import zh from './zh.json';
+import vi from './vi.json';
 
 i18n
   .use(initReactI18next)
@@ -15,6 +16,7 @@ i18n
       es: { translation: es },
       pt: { translation: pt },
       zh: { translation: zh },
+      vi: { translation: vi },
     },
     lng: localStorage.getItem('language') ?? 'en',
     fallbackLng: 'en',
