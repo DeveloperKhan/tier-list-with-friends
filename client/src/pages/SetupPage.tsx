@@ -461,13 +461,20 @@ export function SetupPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-white/40">{itemCount} / {effectiveLimit}</span>
                     {!roomState?.isPremium && (
-                      <button
-                        onClick={handleSupportUs}
-                        className="text-xs font-bold text-game-purple-light hover:text-white transition-colors px-2 py-0.5 rounded-lg hover:bg-white/10"
-                        title="Unlock 2000 items"
-                      >
-                        ⭐ Support
-                      </button>
+                      <div className="relative group/tip">
+                        <button
+                          onClick={handleSupportUs}
+                          className="text-xs font-bold text-game-purple-light hover:text-white transition-colors px-2 py-0.5 rounded-lg hover:bg-white/10"
+                        >
+                          ⭐ Support for more slots
+                        </button>
+                        <div className="pointer-events-none absolute bottom-full right-0 mb-2 w-64 opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150" style={{ zIndex: Z.modal }}>
+                          <div className="rounded-xl border border-white/15 bg-game-bg/95 backdrop-blur-sm px-3 py-2.5 text-xs text-white/80 shadow-xl">
+                            Help support the server costs for this activity. Upgrades image slots per session from 300 to 2000! More upgrades coming soon...
+                          </div>
+                          <div className="absolute right-3 top-full h-2 w-2 -translate-y-1/2 rotate-45 border-b border-r border-white/15 bg-game-bg/95" />
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
