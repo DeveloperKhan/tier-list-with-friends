@@ -9,7 +9,7 @@ import {
 } from "../store.js";
 import { sanitizeTier, sanitizeItem } from "../lib/sanitize.js";
 import { DEFAULT_TIERS, MAX_PLAYERS, MAX_ITEMS, MAX_ITEMS_PREMIUM, MAX_ROOM_MS } from "../lib/constants.js";
-import { hasPremiumEntitlement } from "../lib/entitlements.js";
+import { hasPremiumEntitlement, clearEntitlementCache, checkEntitlementWithBearer } from "../lib/entitlements.js";
 import { msg } from "../lib/messages.js";
 
 function createRoom(instanceId, hostId) {
@@ -31,7 +31,7 @@ function createRoom(instanceId, hostId) {
 
 export function registerRoomHandlers(io, socket) {
   // ── JOIN_ROOM ─────────────────────────────────────────────────────────────
-  socket.on("JOIN_ROOM", async ({ instanceId, userId, username, avatar }) => {
+  socket.on("JOIN_ROOM", async ({ instanceId, userId, username, avatar, accessToken }) => {
     if (!instanceId || !userId) return;
 
     let room = await getRoom(instanceId);
@@ -73,11 +73,13 @@ export function registerRoomHandlers(io, socket) {
     };
 
     // Room-level premium is sticky: once any participant unlocks it, it stays.
+    // Use the user's bearer token (per-user rate limit) instead of the bot token.
+    // Fall back to bot-token check via CLAIM_PREMIUM if bearer check returns null.
     if (!room.isPremium) {
-      const premium = await hasPremiumEntitlement(userId);
-      if (premium) {
+      const premium = await checkEntitlementWithBearer(userId, accessToken);
+      if (premium === true) {
         room.isPremium = true;
-        console.log(`[room:${instanceId}] premium unlocked by ${username}`);
+        console.log(`[room:${instanceId}] premium unlocked by ${username} (bearer)`);
       }
     }
 
@@ -199,6 +201,7 @@ export function registerRoomHandlers(io, socket) {
     const room = await getRoom(info.instanceId);
     if (!room || room.isPremium) return; // already premium, nothing to do
 
+    clearEntitlementCache(info.userId);
     const premium = await hasPremiumEntitlement(info.userId);
     if (!premium) return;
 

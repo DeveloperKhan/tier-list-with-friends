@@ -173,7 +173,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (d.status !== 'ready') return;
       const instanceId = d.discordSdk.instanceId;
       const { id: userId, username, avatar } = d.user;
-      sock.emit('JOIN_ROOM', { instanceId, userId, username, avatar });
+
+      sock.emit('JOIN_ROOM', { instanceId, userId, username, avatar, accessToken: d.accessToken });
     });
 
     sock.on('STATE_UPDATE', (state: RoomState) => {
