@@ -1,8 +1,13 @@
 import express from "express";
-import { searchTemplates, getTemplateItems, fetchImage, closeBrowser } from "./tiermaker.js";
+import { searchTemplates, getTemplateItems, fetchImage, closeBrowser, getBrowser } from "./tiermaker.js";
 
 const app = express();
 const port = process.env.PORT ?? 3002;
+
+app.use((_req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  next();
+});
 
 app.get("/health", (_req, res) => res.sendStatus(200));
 
@@ -53,6 +58,7 @@ app.get("/image", async (req, res) => {
 
 const server = app.listen(port, () => {
   console.log(`Sidecar listening at http://localhost:${port}`);
+  getBrowser().then(() => console.log('[tiermaker] browser ready')).catch(() => {});
 });
 
 process.on("SIGTERM", async () => { await closeBrowser(); server.close(); });

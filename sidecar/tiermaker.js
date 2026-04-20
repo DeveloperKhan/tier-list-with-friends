@@ -31,7 +31,7 @@ const TIERMAKER_BASE = 'https://tiermaker.com';
 let browser = null;
 let _browserLaunchPromise = null;
 
-async function getBrowser() {
+export async function getBrowser() {
   if (browser?.isConnected()) return browser;
   if (!_browserLaunchPromise) {
     _browserLaunchPromise = (async () => {
@@ -173,98 +173,8 @@ export async function searchTemplates(query) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Network interception helpers for getTemplateItems
-// ---------------------------------------------------------------------------
-
-function _resolveImageUrl(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  if (raw.startsWith('http')) return raw;
-  if (raw.startsWith('/images/')) return `https://tiermaker.com${raw}`;
-  return `https://tiermaker.com/images/${raw}`;
-}
-
-function _parseTemplateJson(json) {
-  if (!json || typeof json !== 'object') return null;
-
-  // Paths where TierMaker may embed character arrays
-  const candidates = [
-    json.characters,
-    json.items,
-    json.template?.characters,
-    json.template?.items,
-    json.data?.characters,
-    json.data?.items,
-    json.props?.pageProps?.template?.characters,
-    json.props?.pageProps?.characters,
-    Array.isArray(json) ? json : null,
-  ];
-
-  for (const arr of candidates) {
-    if (!Array.isArray(arr) || arr.length === 0) continue;
-    const first = arr[0];
-    const imgField = ['image', 'imageUrl', 'img', 'src', 'background', 'pic']
-      .find(f => first[f]);
-    if (!imgField) continue;
-
-    const name =
-      json.title ?? json.name ??
-      json.template?.title ?? json.template?.name ?? '';
-
-    return {
-      name,
-      items: arr.map((item, i) => ({
-        id: String(item.id ?? item.charId ?? i + 1),
-        imageUrl: _resolveImageUrl(item[imgField]),
-      })).filter(it => it.imageUrl),
-    };
-  }
-  return null;
-}
-
-async function _scrapeTemplateFromNetwork(page, templateUrl) {
-  const jsonResponses = [];
-
-  const onResponse = async (response) => {
-    if (response.status() < 200 || response.status() >= 300) return;
-    if (!(response.headers()['content-type'] ?? '').includes('json')) return;
-    try {
-      jsonResponses.push(await response.json());
-    } catch { /* ignore */ }
-  };
-
-  page.on('response', onResponse);
-  try {
-    await page.goto(templateUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    // Give XHR/fetch calls that fire after DOM load time to complete
-    await page.waitForTimeout(2_000);
-  } finally {
-    page.off('response', onResponse);
-  }
-
-  // Also check window-level embedded data (Next.js __NEXT_DATA__, etc.)
-  const windowData = await page.evaluate(() => {
-    if (window.__NEXT_DATA__) return window.__NEXT_DATA__;
-    for (const s of document.querySelectorAll('script[type="application/json"]')) {
-      try { return JSON.parse(s.textContent); } catch {}
-    }
-    return null;
-  }).catch(() => null);
-
-  if (windowData) jsonResponses.unshift(windowData);
-
-  for (const body of jsonResponses) {
-    const parsed = _parseTemplateJson(body);
-    if (parsed) return parsed;
-  }
-  return null; // caller falls back to DOM scraping
-}
-
 /**
  * Fetch the items from a TierMaker template page.
- * First tries to intercept the JSON API call TierMaker makes internally
- * (fast — no need to render the full DOM). Falls back to DOM scraping if
- * no matching JSON is found.
  * Results are cached for 24 hours — template content rarely changes.
  *
  * @param {string} templateUrl  must be a tiermaker.com/create/* URL
@@ -277,12 +187,11 @@ export async function getTemplateItems(templateUrl) {
 
   return dedupe(key, async () => {
     const result = await withPage(async (page) => {
-      // Fast path: intercept TierMaker's own API/XHR calls
-      const networkResult = await _scrapeTemplateFromNetwork(page, templateUrl);
-      if (networkResult) return networkResult;
+      console.log(`[tiermaker] navigating to ${templateUrl}`);
+      await page.goto(templateUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await page.waitForTimeout(2_000);
 
-      // Slow path: page is already loaded — scrape the rendered DOM
-      return page.evaluate(() => {
+      const data = await page.evaluate(() => {
         const rawTitle = document.title ?? '';
         const name = rawTitle
           .replace(/^Create a?\s+/i, '')
@@ -296,6 +205,9 @@ export async function getTemplateItems(templateUrl) {
 
         return { name, items };
       });
+
+      console.log(`[tiermaker] DOM scrape completed — ${data.items.length} items`);
+      return data;
     });
 
     cacheSet(key, result, 24 * 60 * 60 * 1000); // 24 hours

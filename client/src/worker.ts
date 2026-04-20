@@ -203,12 +203,13 @@ export default {
       }
     }
 
-    // Proxy /api/tiermaker/* to the backend.
-    if (url.pathname.startsWith('/api/tiermaker/')) {
-      const target = (env.BACKEND_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+    // Proxy /api/tiermaker/search and /api/tiermaker/template to the sidecar directly.
+    if (url.pathname === '/api/tiermaker/search' || url.pathname === '/api/tiermaker/template') {
+      const target = 'https://my-app-sidecar.fly.dev';
+      const sidecarPath = url.pathname.replace('/api/tiermaker', '');
 
       try {
-        const upstream = await fetch(`${target}${url.pathname}${url.search}`, {
+        const upstream = await fetch(`${target}${sidecarPath}${url.search}`, {
           method: request.method,
           headers: request.headers,
           body: request.body ?? undefined,

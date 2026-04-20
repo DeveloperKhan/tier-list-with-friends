@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { GameButton } from '@/components/ui/GameButton';
-import { Gamepad2, CircleCheck, Link, Search } from 'lucide-react';
+import { Gamepad2, CircleCheck, Link } from 'lucide-react';
 
 type SearchResult = {
   url: string;
@@ -341,14 +341,6 @@ function TemplatePreview({
   onLoad?: () => void;
 }) {
   const { t } = useTranslation();
-
-  function proxyImg(tiermakerUrl: string) {
-    if (!tiermakerUrl) return '';
-    const url = tiermakerUrl.startsWith('/')
-      ? `https://tiermaker.com${tiermakerUrl}`
-      : tiermakerUrl;
-    return `/api/tiermaker/image?url=${encodeURIComponent(url)}`;
-  }
 
   return (
     <>
