@@ -183,7 +183,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
             <Link size={12} />
             {t('tierMakerBrowser.pasteUrlTab')}
           </button>
-          <button
+          {/* <button
             onClick={() => switchMode('explore')}
             className={cn(
               'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors',
@@ -194,7 +194,7 @@ export function TierMakerBrowser({ onLoadTemplate, onClose }: TierMakerBrowserPr
           >
             <Search size={12} />
             {t('tierMakerBrowser.exploreTab')}
-          </button>
+          </button> */}
         </div>
 
         {/* URL input */}
