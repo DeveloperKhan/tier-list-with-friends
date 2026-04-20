@@ -1540,7 +1540,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
 
           {/* Tier list + drawing layer */}
           <div ref={drawContainerRef} className="relative flex-1">
-            <main ref={tierListRef} className="game-scroll h-full overflow-y-auto bg-game-bg">
+            <main ref={tierListRef} className="game-scroll absolute inset-0 overflow-y-auto bg-game-bg">
               {roomState.tiers.map((tier) => (
                 <div
                   key={tier.id}
