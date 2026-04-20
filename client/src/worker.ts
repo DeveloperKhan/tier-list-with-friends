@@ -139,7 +139,7 @@ export default {
       const form = new FormData();
       form.append('key', env.VITE_IMGBB_API_KEY);
       form.append('image', b64);
-      const imgbbRes = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: form });
+      const imgbbRes = await fetch('https://api.imgbb.com/1/upload?expiration=86400', { method: 'POST', body: form });
       const data = await imgbbRes.json() as { success: boolean; data?: { url: string } };
       if (!imgbbRes.ok || !data.success) {
         return Response.json({ error: 'Image host upload failed.' }, { status: 502 });
