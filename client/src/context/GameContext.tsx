@@ -9,6 +9,7 @@ import { io, type Socket } from 'socket.io-client';
 import * as msgpackParser from 'socket.io-msgpack-parser';
 import { useDiscord } from './DiscordContext';
 import i18n from '@/i18n';
+import { identifyUser, trackSessionJoined, trackGameEnded } from '@/lib/analytics';
 
 // ---------------------------------------------------------------------------
 // Shared types — mirrors server-side RoomState
@@ -133,6 +134,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [activeDuel, setActiveDuel] = useState<DuelResult | null>(null);
   const [rejectedItemIds, setRejectedItemIds] = useState<Set<string>>(new Set());
   const pendingRejectionsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const sessionStartRef = useRef<number | null>(null);
   // Stable refs so the connect handler always sees fresh values without
   // needing to be re-registered (avoids stale closures on reconnect).
   const discordRef = useRef(discord);
@@ -174,11 +176,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const instanceId = d.discordSdk.instanceId;
       const { id: userId, username, avatar } = d.user;
 
+      identifyUser(userId, username);
+      sessionStartRef.current = Date.now();
       sock.emit('JOIN_ROOM', { instanceId, userId, username, avatar, accessToken: d.accessToken });
     });
 
     sock.on('STATE_UPDATE', (state: RoomState) => {
-      setRoomState(state);
+      setRoomState((prev) => {
+        if (!prev) {
+          const playerCount = Object.keys(state.participants).length;
+          const d = discordRef.current;
+          const isHost = d.status === 'ready' && state.hostId === d.user.id;
+          trackSessionJoined({ playerCount, isHost });
+        }
+        return state;
+      });
       const map: Record<number, string> = {};
       for (const p of Object.values(state.participants)) map[p.index] = p.userId;
       playerIndexRef.current = map;
@@ -279,7 +291,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
 
     sock.on('PHASE_RESET', ({ reason }: { reason?: string } = {}) => {
-      setRoomState(null);
+      setRoomState((prev) => {
+        if (prev) {
+          const durationSeconds = sessionStartRef.current
+            ? Math.round((Date.now() - sessionStartRef.current) / 1000)
+            : 0;
+          trackGameEnded({ durationSeconds, playerCount: Object.keys(prev.participants).length });
+        }
+        return null;
+      });
       setSessionEnded(true);
       setSessionEndReason(reason === 'timeout' ? 'timeout' : null);
       setCursors({});

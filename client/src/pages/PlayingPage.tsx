@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { trackExportCompleted, trackImagesUploaded, trackTextItemsAdded } from '@/lib/analytics';
 import { useTranslation } from 'react-i18next';
 import squareLogoUrl from '../../assets/square-logo.svg?url';
 import discordLogoUrl from '../../assets/discord-logo.svg?url';
@@ -1446,6 +1447,7 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
       }
       const { url } = await res.json() as { url: string };
       setExportUrl(url);
+      trackExportCompleted();
     } catch (err) {
       console.error('[export]', err);
       setToast(t('playing.exportFailed'));
@@ -1465,19 +1467,23 @@ const [drawTool, setDrawTool] = useState<'grab' | 'pen' | 'confetti'>('grab');
   // ── Upload / template actions (any player) ─────────────────────────────
 
   async function handleUploadFiles(files: FileList) {
+    let uploaded = 0;
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
       try {
         const imageId = await uploadImage(file);
         socket!.emit('UPLOAD_IMAGE', { imageId, fileName: file.name });
+        uploaded++;
       } catch (err) {
         setToast(err instanceof Error ? err.message : t('setup.fileUploadFailed', { name: file.name }));
       }
     }
+    if (uploaded > 0) trackImagesUploaded({ count: uploaded, page: 'playing' });
   }
 
   function handleAddText(text: string) {
     socket!.emit('ADD_TEXT_ITEM', { text });
+    trackTextItemsAdded({ count: text.split(',').filter((s) => s.trim()).length, page: 'playing' });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────

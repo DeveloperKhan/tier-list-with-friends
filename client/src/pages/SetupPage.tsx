@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGame, type Tier } from '@/context/GameContext';
+import { trackGameStarted, trackImagesUploaded, trackTextItemsAdded, trackTemplateLoaded, trackSupportClicked } from '@/lib/analytics';
 import { useDiscord } from '@/context/DiscordContext';
 import { GameButton } from '@/components/ui/GameButton';
 import { Panel, SectionLabel } from '@/components/ui/Panel';
@@ -200,6 +201,7 @@ export function SetupPage() {
 
   async function handleSupportUs() {
     if (discord.status !== 'ready') return;
+    trackSupportClicked({ page: 'setup' });
     try {
       await discord.discordSdk.commands.startPurchase({ sku_id: PREMIUM_SKU_ID });
     } catch {
@@ -288,6 +290,7 @@ export function SetupPage() {
   async function uploadFiles(files: FileList | File[]) {
     setUploading(true);
     setSetupError(null);
+    let uploaded = 0;
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
       try {
@@ -300,10 +303,12 @@ export function SetupPage() {
           return { ...prev, [imageId]: { id: imageId, kind: 'upload' as const, imageUrl: '', text: '', fileName: file.name } };
         });
         setBankItemIds((prev) => (prev.length < effectiveLimit ? [...prev, imageId] : prev));
+        uploaded++;
       } catch (err) {
         setSetupError(err instanceof Error ? err.message : t('setup.fileUploadFailed', { name: file.name }));
       }
     }
+    if (uploaded > 0) trackImagesUploaded({ count: uploaded, page: 'setup' });
     setUploading(false);
   }
 
@@ -345,6 +350,7 @@ export function SetupPage() {
     });
     setBankItemIds((prev) => [...prev, ...newEntries.map((e) => e.id)]);
     setTextInput('');
+    if (newEntries.length > 0) trackTextItemsAdded({ count: newEntries.length, page: 'setup' });
   }
 
   function loadTemplate(loaded: Array<{ kind: 'tiermaker'; imageUrl: string; fileName: string }>) {
@@ -364,6 +370,7 @@ export function SetupPage() {
       return next;
     });
     setBankItemIds((prev) => [...prev, ...newEntries.map((e) => e.id)]);
+    if (newEntries.length > 0) trackTemplateLoaded({ itemCount: newEntries.length });
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -374,6 +381,15 @@ export function SetupPage() {
     if (emptyTier) { setSetupError(t('setup.allTiersMustHaveName')); return; }
     if (tiers.length > MAX_TIERS) { setSetupError(t('setup.tooManyTiers', { max: MAX_TIERS })); return; }
     if (bankItemIds.length === 0) { setSetupError(t('setup.addAtLeastOneItem')); return; }
+    const itemValues = Object.values(items);
+    trackGameStarted({
+      tierCount: tiers.length,
+      itemCount: bankItemIds.length,
+      uploadCount: itemValues.filter((i) => i.kind === 'upload').length,
+      tiermakerCount: itemValues.filter((i) => i.kind === 'tiermaker').length,
+      textCount: itemValues.filter((i) => i.kind === 'text').length,
+      playerCount: Object.keys(roomState?.participants ?? {}).length,
+    });
     setIsStarting(true);
     socket?.emit('START_GAME', {
       instanceId: roomState?.instanceId,

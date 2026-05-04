@@ -4,6 +4,9 @@ import { DiscordProvider } from '@/context/DiscordContext';
 import App from '@/App';
 import '@/index.css';
 import '@/i18n';
+import { initAnalytics } from '@/lib/analytics';
+
+initAnalytics();
 
 function setAppHeight() {
   document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);

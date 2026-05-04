@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { trackSupportClicked } from '@/lib/analytics';
 import { useGame } from '@/context/GameContext';
 import { useDiscord } from '@/context/DiscordContext';
 import { PlayerList } from '@/components/ui/PlayerList';
@@ -18,6 +19,7 @@ export function WaitingPage() {
 
   async function handleSupportUs() {
     if (discord.status !== 'ready') return;
+    trackSupportClicked({ page: 'waiting' });
     try {
       await discord.discordSdk.commands.startPurchase({ sku_id: PREMIUM_SKU_ID });
     } catch {
