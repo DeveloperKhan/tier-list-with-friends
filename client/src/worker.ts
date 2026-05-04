@@ -192,6 +192,26 @@ export default {
       }
     }
 
+    // PostHog analytics proxy — forwards /api/ph/* to PostHog so Discord's CSP
+    // doesn't block outbound requests to us.i.posthog.com.
+    if (url.pathname.startsWith('/api/ph/')) {
+      const phPath = url.pathname.replace('/api/ph', '');
+      try {
+        const upstream = await fetch(`https://us.i.posthog.com${phPath}${url.search}`, {
+          method: request.method,
+          headers: request.headers,
+          body: request.body ?? undefined,
+        });
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers: upstream.headers,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: `PostHog proxy error: ${message}` }, { status: 502 });
+      }
+    }
+
     // WebSocket proxy for /ws/* — return upstream directly so Cloudflare can
     // forward the 101 Switching Protocols handshake. Wrapping in new Response()
     // breaks the upgrade and forces Socket.IO to stay on HTTP long-polling.

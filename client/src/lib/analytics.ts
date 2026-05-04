@@ -7,11 +7,10 @@ function track(event: string, props?: Record<string, unknown>) {
 
 export function initAnalytics() {
   const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
-  const host = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
   console.log('[analytics] token present:', !!token);
   if (!token) return;
   posthog.init(token, {
-    api_host: host ?? 'https://us.i.posthog.com',
+    api_host: `${window.location.origin}/api/ph`,
     capture_pageview: false,
     capture_pageleave: false,
     autocapture: false,
